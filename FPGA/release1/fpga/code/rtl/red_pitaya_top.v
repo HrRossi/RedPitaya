@@ -75,30 +75,6 @@
 module red_pitaya_top
 (
    // PS connections
- `ifdef TOOL_AHEAD
-   inout  [54-1: 0] processing_system7_0_MIO,
-   input            processing_system7_0_PS_SRSTB_pin,
-   input            processing_system7_0_PS_CLK_pin,
-   input            processing_system7_0_PS_PORB_pin,
-   inout            processing_system7_0_DDR_Clk,
-   inout            processing_system7_0_DDR_Clk_n,
-   inout            processing_system7_0_DDR_CKE,
-   inout            processing_system7_0_DDR_CS_n,
-   inout            processing_system7_0_DDR_RAS_n,
-   inout            processing_system7_0_DDR_CAS_n,
-   output           processing_system7_0_DDR_WEB_pin,
-   inout  [ 3-1: 0] processing_system7_0_DDR_BankAddr,
-   inout  [15-1: 0] processing_system7_0_DDR_Addr,
-   inout            processing_system7_0_DDR_ODT,
-   inout            processing_system7_0_DDR_DRSTB,
-   inout  [32-1: 0] processing_system7_0_DDR_DQ,
-   inout  [ 4-1: 0] processing_system7_0_DDR_DM,
-   inout  [ 4-1: 0] processing_system7_0_DDR_DQS,
-   inout  [ 4-1: 0] processing_system7_0_DDR_DQS_n,
-   inout            processing_system7_0_DDR_VRN,
-   inout            processing_system7_0_DDR_VRP,
- `endif
- `ifdef TOOL_VIVADO
    inout  [54-1: 0] FIXED_IO_mio       ,
    inout            FIXED_IO_ps_clk    ,
    inout            FIXED_IO_ps_porb   ,
@@ -120,7 +96,6 @@ module red_pitaya_top
    inout            DDR_ras_n          ,
    inout            DDR_reset_n        ,
    inout            DDR_we_n           ,
- `endif
 
    // Red Pitaya periphery
   
@@ -166,7 +141,6 @@ module red_pitaya_top
 
 
 
-
 //---------------------------------------------------------------------------------
 //
 //  Connections to PS
@@ -185,33 +159,77 @@ wire  [ 32-1: 0] ps_sys_rdata       ;
 wire             ps_sys_err         ;
 wire             ps_sys_ack         ;
 
-  
+// ADC buffer
+wire [ 2-1:0]   adcbuf_select;  // channel buffer select
+wire [ 4-1:0]   adcbuf_ready;   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+//wire [ 4-1:0]   adcbuf_ack;     // buffer ready acknowledge [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+wire [12-1:0]   adcbuf_raddr;   // buffer read address
+wire [64-1:0]   adcbuf_rdata;   // buffer read data
+
+//---------------------------------------------------------------------------------
+//
+//  system bus decoder & multiplexer
+//  it breaks memory addresses into 8 regions
+
+wire                sys_clk    = ps_sys_clk      ;
+wire                sys_rstn   = ps_sys_rstn     ;
+wire  [    32-1: 0] sys_addr   = ps_sys_addr     ;
+wire  [    32-1: 0] sys_wdata  = ps_sys_wdata    ;
+wire  [     4-1: 0] sys_sel    = ps_sys_sel      ;
+wire  [     8-1: 0] sys_wen    ;
+wire  [     8-1: 0] sys_ren    ;
+wire  [(8*32)-1: 0] sys_rdata  ;
+wire  [ (8*1)-1: 0] sys_err    ;
+wire  [ (8*1)-1: 0] sys_ack    ;
+reg   [     8-1: 0] sys_cs     ;
+
+always @(sys_addr) begin
+   sys_cs = 8'h0 ;
+   case (sys_addr[22:20])
+      3'h0, 3'h1, 3'h2, 3'h3, 3'h4, 3'h5, 3'h6, 3'h7 : 
+         sys_cs[sys_addr[22:20]] = 1'b1 ; 
+   endcase
+end
+
+assign sys_wen = sys_cs & {8{ps_sys_wen}}  ;
+assign sys_ren = sys_cs & {8{ps_sys_ren}}  ;
+
+
+assign ps_sys_rdata = {32{sys_cs[ 0]}} & sys_rdata[ 0*32+31: 0*32] |
+                      {32{sys_cs[ 1]}} & sys_rdata[ 1*32+31: 1*32] |
+                      {32{sys_cs[ 2]}} & sys_rdata[ 2*32+31: 2*32] |
+                      {32{sys_cs[ 3]}} & sys_rdata[ 3*32+31: 3*32] |
+                      {32{sys_cs[ 4]}} & sys_rdata[ 4*32+31: 4*32] | 
+                      {32{sys_cs[ 5]}} & sys_rdata[ 5*32+31: 5*32] |
+                      {32{sys_cs[ 6]}} & sys_rdata[ 6*32+31: 6*32] |
+                      {32{sys_cs[ 7]}} & sys_rdata[ 7*32+31: 7*32] ; 
+
+assign ps_sys_err   = sys_cs[ 0] & sys_err[  0] |
+                      sys_cs[ 1] & sys_err[  1] |
+                      sys_cs[ 2] & sys_err[  2] |
+                      sys_cs[ 3] & sys_err[  3] |
+                      sys_cs[ 4] & sys_err[  4] | 
+                      sys_cs[ 5] & sys_err[  5] |
+                      sys_cs[ 6] & sys_err[  6] |
+                      sys_cs[ 7] & sys_err[  7] ; 
+
+assign ps_sys_ack   = sys_cs[ 0] & sys_ack[  0] |
+                      sys_cs[ 1] & sys_ack[  1] |
+                      sys_cs[ 2] & sys_ack[  2] |
+                      sys_cs[ 3] & sys_ack[  3] |
+                      sys_cs[ 4] & sys_ack[  4] | 
+                      sys_cs[ 5] & sys_ack[  5] |
+                      sys_cs[ 6] & sys_ack[  6] |
+                      sys_cs[ 7] & sys_ack[  7] ; 
+
+
+assign sys_rdata[ 7*32+31: 7*32] = 32'h0;
+assign sys_err[7] = 1'b0;
+assign sys_ack[7] = 1'b1;
+
+
 red_pitaya_ps i_ps
 (
- `ifdef TOOL_AHEAD
-  .processing_system7_0_MIO          (  processing_system7_0_MIO            ),
-  .processing_system7_0_PS_SRSTB_pin (  processing_system7_0_PS_SRSTB_pin   ),
-  .processing_system7_0_PS_CLK_pin   (  processing_system7_0_PS_CLK_pin     ),
-  .processing_system7_0_PS_PORB_pin  (  processing_system7_0_PS_PORB_pin    ),
-  .processing_system7_0_DDR_Clk      (  processing_system7_0_DDR_Clk        ),
-  .processing_system7_0_DDR_Clk_n    (  processing_system7_0_DDR_Clk_n      ),
-  .processing_system7_0_DDR_CKE      (  processing_system7_0_DDR_CKE        ),
-  .processing_system7_0_DDR_CS_n     (  processing_system7_0_DDR_CS_n       ),
-  .processing_system7_0_DDR_RAS_n    (  processing_system7_0_DDR_RAS_n      ),
-  .processing_system7_0_DDR_CAS_n    (  processing_system7_0_DDR_CAS_n      ),
-  .processing_system7_0_DDR_WEB_pin  (  processing_system7_0_DDR_WEB_pin    ),
-  .processing_system7_0_DDR_BankAddr (  processing_system7_0_DDR_BankAddr   ),
-  .processing_system7_0_DDR_Addr     (  processing_system7_0_DDR_Addr       ),
-  .processing_system7_0_DDR_ODT      (  processing_system7_0_DDR_ODT        ),
-  .processing_system7_0_DDR_DRSTB    (  processing_system7_0_DDR_DRSTB      ),
-  .processing_system7_0_DDR_DQ       (  processing_system7_0_DDR_DQ         ),
-  .processing_system7_0_DDR_DM       (  processing_system7_0_DDR_DM         ),
-  .processing_system7_0_DDR_DQS      (  processing_system7_0_DDR_DQS        ),
-  .processing_system7_0_DDR_DQS_n    (  processing_system7_0_DDR_DQS_n      ),
-  .processing_system7_0_DDR_VRN      (  processing_system7_0_DDR_VRN        ),
-  .processing_system7_0_DDR_VRP      (  processing_system7_0_DDR_VRP        ),
- `endif
- `ifdef TOOL_VIVADO
   .FIXED_IO_mio       (  FIXED_IO_mio                ),
   .FIXED_IO_ps_clk    (  FIXED_IO_ps_clk             ),
   .FIXED_IO_ps_porb   (  FIXED_IO_ps_porb            ),
@@ -233,7 +251,6 @@ red_pitaya_ps i_ps
   .DDR_ras_n          (  DDR_ras_n                   ),
   .DDR_reset_n        (  DDR_reset_n                 ),
   .DDR_we_n           (  DDR_we_n                    ),
- `endif
 
   .fclk_clk_o      (  fclk               ),
   .fclk_rstn_o     (  frstn              ),
@@ -262,12 +279,27 @@ red_pitaya_ps i_ps
   .spi_ss_i        (  1'b1               ),  // slave selected
   .spi_sclk_i      (  1'b0               ),  // serial clock
   .spi_mosi_i      (  1'b0               ),  // master out slave in
-  .spi_miso_o      (                     )   // master in slave out
+  .spi_miso_o      (                     ),  // master in slave out
 
+    // ADC data buffer
+    .adcbuf_select_o    (adcbuf_select          ),  //
+    .adcbuf_ready_i     (adcbuf_ready           ),  //
+    //.adcbuf_ack_o       (adcbuf_ack             ),  //
+    .adcbuf_raddr_o     (adcbuf_raddr           ),  //
+    .adcbuf_rdata_i     (adcbuf_rdata           ),  //
+
+    // System bus region 6
+    .sysbus_clk_i       (sys_clk                ),  // clock
+    .sysbus_rstn_i      (sys_rstn               ),  // reset - active low
+    .sysbus_addr_i      (sys_addr               ),  // address
+    .sysbus_wdata_i     (sys_wdata              ),  // write data
+    .sysbus_sel_i       (sys_sel                ),  // write byte select
+    .sysbus_wen_i       (sys_wen[6]             ),  // write enable
+    .sysbus_ren_i       (sys_ren[6]             ),  // read enable
+    .sysbus_rdata_o     (sys_rdata[6*32+31:6*32]),  // read data
+    .sysbus_err_o       (sys_err[6]             ),  // error indicator
+    .sysbus_ack_o       (sys_ack[6]             )   // acknowledge signal
 );
-
-
-
 
 
 
@@ -342,78 +374,6 @@ end
 
 
 
-
-
-
-//---------------------------------------------------------------------------------
-//
-//  system bus decoder & multiplexer
-//  it breaks memory addresses into 8 regions
-
-wire                sys_clk    = ps_sys_clk      ;
-wire                sys_rstn   = ps_sys_rstn     ;
-wire  [    32-1: 0] sys_addr   = ps_sys_addr     ;
-wire  [    32-1: 0] sys_wdata  = ps_sys_wdata    ;
-wire  [     4-1: 0] sys_sel    = ps_sys_sel      ;
-wire  [     8-1: 0] sys_wen    ;
-wire  [     8-1: 0] sys_ren    ;
-wire  [(8*32)-1: 0] sys_rdata  ;
-wire  [ (8*1)-1: 0] sys_err    ;
-wire  [ (8*1)-1: 0] sys_ack    ;
-reg   [     8-1: 0] sys_cs     ;
-
-always @(sys_addr) begin
-   sys_cs = 8'h0 ;
-   case (sys_addr[22:20])
-      3'h0, 3'h1, 3'h2, 3'h3, 3'h4, 3'h5, 3'h6, 3'h7 : 
-         sys_cs[sys_addr[22:20]] = 1'b1 ; 
-   endcase
-end
-
-assign sys_wen = sys_cs & {8{ps_sys_wen}}  ;
-assign sys_ren = sys_cs & {8{ps_sys_ren}}  ;
-
-
-assign ps_sys_rdata = {32{sys_cs[ 0]}} & sys_rdata[ 0*32+31: 0*32] |
-                      {32{sys_cs[ 1]}} & sys_rdata[ 1*32+31: 1*32] |
-                      {32{sys_cs[ 2]}} & sys_rdata[ 2*32+31: 2*32] |
-                      {32{sys_cs[ 3]}} & sys_rdata[ 3*32+31: 3*32] |
-                      {32{sys_cs[ 4]}} & sys_rdata[ 4*32+31: 4*32] | 
-                      {32{sys_cs[ 5]}} & sys_rdata[ 5*32+31: 5*32] |
-                      {32{sys_cs[ 6]}} & sys_rdata[ 6*32+31: 6*32] |
-                      {32{sys_cs[ 7]}} & sys_rdata[ 7*32+31: 7*32] ; 
-
-assign ps_sys_err   = sys_cs[ 0] & sys_err[  0] |
-                      sys_cs[ 1] & sys_err[  1] |
-                      sys_cs[ 2] & sys_err[  2] |
-                      sys_cs[ 3] & sys_err[  3] |
-                      sys_cs[ 4] & sys_err[  4] | 
-                      sys_cs[ 5] & sys_err[  5] |
-                      sys_cs[ 6] & sys_err[  6] |
-                      sys_cs[ 7] & sys_err[  7] ; 
-
-assign ps_sys_ack   = sys_cs[ 0] & sys_ack[  0] |
-                      sys_cs[ 1] & sys_ack[  1] |
-                      sys_cs[ 2] & sys_ack[  2] |
-                      sys_cs[ 3] & sys_ack[  3] |
-                      sys_cs[ 4] & sys_ack[  4] | 
-                      sys_cs[ 5] & sys_ack[  5] |
-                      sys_cs[ 6] & sys_ack[  6] |
-                      sys_cs[ 7] & sys_ack[  7] ; 
-
-
-assign sys_rdata[ 6*32+31: 6*32] = 32'h0;
-
-assign sys_err[6] = {1{1'b0}} ;
-assign sys_ack[6] = {1{1'b1}} ;
-
-
-
-
-
-
-
-
 //---------------------------------------------------------------------------------
 //
 //  House Keeping
@@ -440,7 +400,7 @@ red_pitaya_hk i_hk
   .exp_n_dat_o     (  exp_n_out                  ),
   .exp_n_dir_o     (  exp_n_dir                  ),
 
-   // System bus
+   // System bus region 0
   .sys_clk_i       (  sys_clk                    ),  // clock
   .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
   .sys_addr_i      (  sys_addr                   ),  // address
@@ -485,7 +445,7 @@ red_pitaya_scope i_scope
   .trig_ext_i      (  exp_p_in[0]                ),  // external trigger
   .trig_asg_i      (  trig_asg_out               ),  // ASG trigger
 
-   // System bus
+   // System bus region 1
   .sys_clk_i       (  sys_clk                    ),  // clock
   .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
   .sys_addr_i      (  sys_addr                   ),  // address
@@ -495,11 +455,17 @@ red_pitaya_scope i_scope
   .sys_ren_i       (  sys_ren[1]                 ),  // read enable
   .sys_rdata_o     (  sys_rdata[ 1*32+31: 1*32]  ),  // read data
   .sys_err_o       (  sys_err[1]                 ),  // error indicator
-  .sys_ack_o       (  sys_ack[1]                 )   // acknowledge signal
+  .sys_ack_o       (  sys_ack[1]                 ),  // acknowledge signal
+
+    // ADC data buffer
+    .adcbuf_clk_i      (fclk[0]            ),  // clock
+    .adcbuf_rstn_i     (frstn[0]           ),  // reset
+    .adcbuf_select_i   (adcbuf_select      ),  // channel buffer select
+    .adcbuf_ready_o    (adcbuf_ready       ),  // buffer ready
+    //.adcbuf_ack_i      (adcbuf_ack         ),  // buffer ready acknowledge
+    .adcbuf_raddr_i    (adcbuf_raddr       ),  // buffer read address
+    .adcbuf_rdata_o    (adcbuf_rdata       )   // buffer read data
 );
-
-
-
 
 
 
@@ -523,7 +489,7 @@ red_pitaya_asg i_asg
   .trig_b_i        (  exp_p_in[0]                ),
   .trig_out_o      (  trig_asg_out               ),
 
-  // System bus
+  // System bus region 2
   .sys_clk_i       (  sys_clk                    ),  // clock
   .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
   .sys_addr_i      (  sys_addr                   ),  // address
@@ -535,9 +501,6 @@ red_pitaya_asg i_asg
   .sys_err_o       (  sys_err[2]                 ),  // error indicator
   .sys_ack_o       (  sys_ack[2]                 )   // acknowledge signal
 );
-
-
-
 
 
 
@@ -560,7 +523,7 @@ red_pitaya_pid i_pid
   .dat_a_o         (  pid_a                      ),  // out 1
   .dat_b_o         (  pid_b                      ),  // out 2
 
-  // System bus
+  // System bus region 3
   .sys_clk_i       (  sys_clk                    ),  // clock
   .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
   .sys_addr_i      (  sys_addr                   ),  // address
@@ -576,9 +539,10 @@ red_pitaya_pid i_pid
 
 
 
+
 //---------------------------------------------------------------------------------
 //
-//  Sumation of ASG and PID signal
+//  Summation of ASG and PID signal
 //  perform saturation before sending to DAC 
 
 wire  [ 15-1: 0] dac_a_sum       ;
@@ -608,11 +572,6 @@ end
 
 
 
-
-
-
-
-
 //---------------------------------------------------------------------------------
 //
 //  Analog mixed signals
@@ -632,7 +591,7 @@ red_pitaya_ams i_ams
   .dac_c_o         (  dac_pwm_c                  ),
   .dac_d_o         (  dac_pwm_d                  ),
 
-   // System bus
+   // System bus region 4
   .sys_clk_i       (  sys_clk                    ),  // clock
   .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
   .sys_addr_i      (  sys_addr                   ),  // address
@@ -644,9 +603,6 @@ red_pitaya_ams i_ams
   .sys_err_o       (  sys_err[4]                 ),  // error indicator
   .sys_ack_o       (  sys_ack[4]                 )   // acknowledge signal
 );
-
-
-
 
 
 
@@ -685,7 +641,7 @@ red_pitaya_daisy i_daisy
 
   .debug_o         (/*led_o*/                    ),
 
-   // System bus
+   // System bus region 5
   .sys_clk_i       (  sys_clk                    ),  // clock
   .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
   .sys_addr_i      (  sys_addr                   ),  // address
@@ -702,57 +658,37 @@ red_pitaya_daisy i_daisy
 
 
 
+////---------------------------------------------------------------------------------
+////
+////  Power consumption test
 
+//red_pitaya_test i_test
+//(
+//   // power test
+//  .clk_i           (  adc_clk                    ),  // clock
+//  .rstn_i          (  adc_rstn                   ),  // reset - active low
 
+//  .rand_o          (                             ),
 
+//   // System bus region 7
+//  .sys_clk_i       (  sys_clk                    ),  // clock
+//  .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
+//  .sys_addr_i      (  sys_addr                   ),  // address
+//  .sys_wdata_i     (  sys_wdata                  ),  // write data
+//  .sys_sel_i       (  sys_sel                    ),  // write byte select
+//  .sys_wen_i       (  sys_wen[7]                 ),  // write enable
+//  .sys_ren_i       (  sys_ren[7]                 ),  // read enable
+//  .sys_rdata_o     (  sys_rdata[ 7*32+31: 7*32]  ),  // read data
+//  .sys_err_o       (  sys_err[7]                 ),  // error indicator
+//  .sys_ack_o       (  sys_ack[7]                 )   // acknowledge signal
+//);
 
-//---------------------------------------------------------------------------------
-//
-//  Power consumtion test
-
-red_pitaya_test i_test
-(
-   // power test
-  .clk_i           (  adc_clk                    ),  // clock
-  .rstn_i          (  adc_rstn                   ),  // reset - active low
-
-  .rand_o          (                             ),
-
-   // System bus
-  .sys_clk_i       (  sys_clk                    ),  // clock
-  .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
-  .sys_addr_i      (  sys_addr                   ),  // address
-  .sys_wdata_i     (  sys_wdata                  ),  // write data
-  .sys_sel_i       (  sys_sel                    ),  // write byte select
-  .sys_wen_i       (  sys_wen[7]                 ),  // write enable
-  .sys_ren_i       (  sys_ren[7]                 ),  // read enable
-  .sys_rdata_o     (  sys_rdata[ 7*32+31: 7*32]  ),  // read data
-  .sys_err_o       (  sys_err[7]                 ),  // error indicator
-  .sys_ack_o       (  sys_ack[7]                 )   // acknowledge signal
-);
-
-//assign sys_rdata[ 7*32+31: 7*32] = 32'h0 ; 
-//assign sys_err[7] = 1'b0 ;
-//assign sys_ack[7] = 1'b1 ;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+////assign sys_rdata[ 7*32+31: 7*32] = 32'h0 ; 
+////assign sys_err[7] = 1'b0 ;
+////assign sys_ack[7] = 1'b1 ;
 
 
 
 
 
 endmodule
-

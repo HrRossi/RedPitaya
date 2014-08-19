@@ -46,30 +46,6 @@
 module red_pitaya_ps
 (
    // PS peripherals
- `ifdef TOOL_AHEAD
-   inout   [ 54-1: 0] processing_system7_0_MIO,
-   input              processing_system7_0_PS_SRSTB_pin,
-   input              processing_system7_0_PS_CLK_pin,
-   input              processing_system7_0_PS_PORB_pin,
-   inout              processing_system7_0_DDR_Clk,
-   inout              processing_system7_0_DDR_Clk_n,
-   inout              processing_system7_0_DDR_CKE,
-   inout              processing_system7_0_DDR_CS_n,
-   inout              processing_system7_0_DDR_RAS_n,
-   inout              processing_system7_0_DDR_CAS_n,
-   output             processing_system7_0_DDR_WEB_pin,
-   inout   [  3-1: 0] processing_system7_0_DDR_BankAddr,
-   inout   [ 15-1: 0] processing_system7_0_DDR_Addr,
-   inout              processing_system7_0_DDR_ODT,
-   inout              processing_system7_0_DDR_DRSTB,
-   inout   [ 32-1: 0] processing_system7_0_DDR_DQ,
-   inout   [  4-1: 0] processing_system7_0_DDR_DM,
-   inout   [  4-1: 0] processing_system7_0_DDR_DQS,
-   inout   [  4-1: 0] processing_system7_0_DDR_DQS_n,
-   inout              processing_system7_0_DDR_VRN,
-   inout              processing_system7_0_DDR_VRP,
- `endif
- `ifdef TOOL_VIVADO
    inout   [ 54-1: 0] FIXED_IO_mio       ,
    inout              FIXED_IO_ps_clk    ,
    inout              FIXED_IO_ps_porb   ,
@@ -91,8 +67,6 @@ module red_pitaya_ps
    inout              DDR_ras_n          ,
    inout              DDR_reset_n        ,
    inout              DDR_we_n           ,
- `endif
-
 
    output  [  4-1: 0] fclk_clk_o         ,
    output  [  4-1: 0] fclk_rstn_o        ,
@@ -120,8 +94,26 @@ module red_pitaya_ps
    input              spi_ss_i           ,  // slave selected
    input              spi_sclk_i         ,  // serial clock
    input              spi_mosi_i         ,  // master out slave in
-   output             spi_miso_o            // master in slave out
+   output             spi_miso_o         ,  // master in slave out
 
+    // ADC data buffer
+    output [   1:0] adcbuf_select_o ,
+    input  [ 4-1:0] adcbuf_ready_i  ,   // [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    //output [ 4-1:0] adcbuf_ack_o    ,   // [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    output [12-1:0] adcbuf_raddr_o  ,
+    input  [64-1:0] adcbuf_rdata_i  ,
+
+    // System bus
+    input           sysbus_clk_i    ,   //!< bus clock
+    input           sysbus_rstn_i   ,   //!< bus reset - active low
+    input  [32-1:0] sysbus_addr_i   ,   //!< bus saddress
+    input  [32-1:0] sysbus_wdata_i  ,   //!< bus write data
+    input   [4-1:0] sysbus_sel_i    ,   //!< bus write byte select
+    input           sysbus_wen_i    ,   //!< bus write enable
+    input           sysbus_ren_i    ,   //!< bus read enable
+    output [32-1:0] sysbus_rdata_o  ,   //!< bus read data
+    output          sysbus_err_o    ,   //!< bus error indicator
+    output          sysbus_ack_o        //!< bus acknowledge signal
 );
 
 
@@ -171,126 +163,58 @@ wire [  2-1: 0] gp0_maxi_rresp       ;
 wire [ 32-1: 0] gp0_maxi_rdata       ;
 wire            gp0_maxi_arstn       ;
 
+wire [  32-1:0] hp0_saxi_araddr;
+wire [     1:0] hp0_saxi_arburst;
+wire [     3:0] hp0_saxi_arcache;
+wire [   6-1:0] hp0_saxi_arid;
+wire [   4-1:0] hp0_saxi_arlen;
+wire [     1:0] hp0_saxi_arlock;
+wire [     2:0] hp0_saxi_arprot;
+wire [     3:0] hp0_saxi_arqos;
+wire            hp0_saxi_arready;
+wire [     2:0] hp0_saxi_arsize;
+wire            hp0_saxi_arvalid;
+wire [  32-1:0] hp0_saxi_awaddr;
+wire [     1:0] hp0_saxi_awburst;
+wire [     3:0] hp0_saxi_awcache;
+wire [   6-1:0] hp0_saxi_awid;
+wire [   4-1:0] hp0_saxi_awlen;
+wire [     1:0] hp0_saxi_awlock;
+wire [     2:0] hp0_saxi_awprot;
+wire [     3:0] hp0_saxi_awqos;
+wire            hp0_saxi_awready;
+wire [     2:0] hp0_saxi_awsize;
+wire            hp0_saxi_awvalid;
+wire [   6-1:0] hp0_saxi_bid;
+wire            hp0_saxi_bready;
+wire [     1:0] hp0_saxi_bresp;
+wire            hp0_saxi_bvalid;
+wire [  64-1:0] hp0_saxi_rdata;
+wire [   6-1:0] hp0_saxi_rid;
+wire            hp0_saxi_rlast;
+wire            hp0_saxi_rready;
+wire [     1:0] hp0_saxi_rresp;
+wire            hp0_saxi_rvalid;
+wire [  64-1:0] hp0_saxi_wdata;
+wire [   6-1:0] hp0_saxi_wid;
+wire            hp0_saxi_wlast;
+wire            hp0_saxi_wready;
+wire [   8-1:0] hp0_saxi_wstrb;
+wire            hp0_saxi_wvalid;
 
 
 assign fclk_rstn_o    = fclk_rstn      ;
 assign gp0_maxi_aclk  = fclk_clk_o[0]  ;
+assign hp0_saxi_aclk  = fclk_clk_o[0]  ;
 
 BUFG i_fclk0_buf  (.O(fclk_clk_o[0]), .I(fclk_clk[0]));
 BUFG i_fclk1_buf  (.O(fclk_clk_o[1]), .I(fclk_clk[1]));
 BUFG i_fclk2_buf  (.O(fclk_clk_o[2]), .I(fclk_clk[2]));
 BUFG i_fclk3_buf  (.O(fclk_clk_o[3]), .I(fclk_clk[3]));
 
-//---------------------------------------------------------------------------------
-//
-//  USING PLANAHEAD
-
-`ifdef TOOL_AHEAD
- system_stub system_i
- (
- // MIO
-  .processing_system7_0_MIO           (  processing_system7_0_MIO             ),
-  .processing_system7_0_PS_SRSTB_pin  (  processing_system7_0_PS_SRSTB_pin    ),
-  .processing_system7_0_PS_CLK_pin    (  processing_system7_0_PS_CLK_pin      ),
-  .processing_system7_0_PS_PORB_pin   (  processing_system7_0_PS_PORB_pin     ),
-  .processing_system7_0_DDR_Clk       (  processing_system7_0_DDR_Clk         ),
-  .processing_system7_0_DDR_Clk_n     (  processing_system7_0_DDR_Clk_n       ),
-  .processing_system7_0_DDR_CKE       (  processing_system7_0_DDR_CKE         ),
-  .processing_system7_0_DDR_CS_n      (  processing_system7_0_DDR_CS_n        ),
-  .processing_system7_0_DDR_RAS_n     (  processing_system7_0_DDR_RAS_n       ),
-  .processing_system7_0_DDR_CAS_n     (  processing_system7_0_DDR_CAS_n       ),
-  .processing_system7_0_DDR_WEB_pin   (  processing_system7_0_DDR_WEB_pin     ),
-  .processing_system7_0_DDR_BankAddr  (  processing_system7_0_DDR_BankAddr    ),
-  .processing_system7_0_DDR_Addr      (  processing_system7_0_DDR_Addr        ),
-  .processing_system7_0_DDR_ODT       (  processing_system7_0_DDR_ODT         ),
-  .processing_system7_0_DDR_DRSTB     (  processing_system7_0_DDR_DRSTB       ),
-  .processing_system7_0_DDR_DQ        (  processing_system7_0_DDR_DQ          ),
-  .processing_system7_0_DDR_DM        (  processing_system7_0_DDR_DM          ),
-  .processing_system7_0_DDR_DQS       (  processing_system7_0_DDR_DQS         ),
-  .processing_system7_0_DDR_DQS_n     (  processing_system7_0_DDR_DQS_n       ),
-  .processing_system7_0_DDR_VRN       (  processing_system7_0_DDR_VRN         ),
-  .processing_system7_0_DDR_VRP       (  processing_system7_0_DDR_VRP         ),
-
- // FCLKs
-  .processing_system7_0_FCLK_CLK0_pin          (  fclk_clk[0]                 ),  // out
-  .processing_system7_0_FCLK_CLK1_pin          (  fclk_clk[1]                 ),  // out
-  .processing_system7_0_FCLK_CLK2_pin          (  fclk_clk[2]                 ),  // out
-  .processing_system7_0_FCLK_CLK3_pin          (  fclk_clk[3]                 ),  // out
-  .processing_system7_0_FCLK_RESET0_N_pin      (  fclk_rstn[0]                ),  // out
-  .processing_system7_0_FCLK_RESET1_N_pin      (  fclk_rstn[1]                ),  // out
-  .processing_system7_0_FCLK_RESET2_N_pin      (  fclk_rstn[2]                ),  // out
-  .processing_system7_0_FCLK_RESET3_N_pin      (  fclk_rstn[3]                ),  // out
-
- // GP0
-  .processing_system7_0_M_AXI_GP0_ARVALID_pin  (  gp0_maxi_arvalid            ),  // out
-  .processing_system7_0_M_AXI_GP0_AWVALID_pin  (  gp0_maxi_awvalid            ),  // out
-  .processing_system7_0_M_AXI_GP0_BREADY_pin   (  gp0_maxi_bready             ),  // out
-  .processing_system7_0_M_AXI_GP0_RREADY_pin   (  gp0_maxi_rready             ),  // out
-  .processing_system7_0_M_AXI_GP0_WLAST_pin    (  gp0_maxi_wlast              ),  // out
-  .processing_system7_0_M_AXI_GP0_WVALID_pin   (  gp0_maxi_wvalid             ),  // out
-  .processing_system7_0_M_AXI_GP0_ARID_pin     (  gp0_maxi_arid               ),  // out 12
-  .processing_system7_0_M_AXI_GP0_AWID_pin     (  gp0_maxi_awid               ),  // out 12
-  .processing_system7_0_M_AXI_GP0_WID_pin      (  gp0_maxi_wid                ),  // out 12
-  .processing_system7_0_M_AXI_GP0_ARBURST_pin  (  gp0_maxi_arburst            ),  // out 2
-  .processing_system7_0_M_AXI_GP0_ARLOCK_pin   (  gp0_maxi_arlock             ),  // out 2
-  .processing_system7_0_M_AXI_GP0_ARSIZE_pin   (  gp0_maxi_arsize             ),  // out 3
-  .processing_system7_0_M_AXI_GP0_AWBURST_pin  (  gp0_maxi_awburst            ),  // out 2
-  .processing_system7_0_M_AXI_GP0_AWLOCK_pin   (  gp0_maxi_awlock             ),  // out 2
-  .processing_system7_0_M_AXI_GP0_AWSIZE_pin   (  gp0_maxi_awsize             ),  // out 3
-  .processing_system7_0_M_AXI_GP0_ARPROT_pin   (  gp0_maxi_arprot             ),  // out 3
-  .processing_system7_0_M_AXI_GP0_AWPROT_pin   (  gp0_maxi_awprot             ),  // out 3
-  .processing_system7_0_M_AXI_GP0_ARADDR_pin   (  gp0_maxi_araddr             ),  // out 32
-  .processing_system7_0_M_AXI_GP0_AWADDR_pin   (  gp0_maxi_awaddr             ),  // out 32
-  .processing_system7_0_M_AXI_GP0_WDATA_pin    (  gp0_maxi_wdata              ),  // out 32
-  .processing_system7_0_M_AXI_GP0_ARCACHE_pin  (  gp0_maxi_arcache            ),  // out 4
-  .processing_system7_0_M_AXI_GP0_ARLEN_pin    (  gp0_maxi_arlen              ),  // out 4
-  .processing_system7_0_M_AXI_GP0_ARQOS_pin    (  gp0_maxi_arqos              ),  // out 4
-  .processing_system7_0_M_AXI_GP0_AWCACHE_pin  (  gp0_maxi_awcache            ),  // out 4
-  .processing_system7_0_M_AXI_GP0_AWLEN_pin    (  gp0_maxi_awlen              ),  // out 4
-  .processing_system7_0_M_AXI_GP0_AWQOS_pin    (  gp0_maxi_awqos              ),  // out 4
-  .processing_system7_0_M_AXI_GP0_WSTRB_pin    (  gp0_maxi_wstrb              ),  // out 4
-  .processing_system7_0_M_AXI_GP0_ACLK_pin     (  gp0_maxi_aclk               ),  // in
-  .processing_system7_0_M_AXI_GP0_ARREADY_pin  (  gp0_maxi_arready            ),  // in
-  .processing_system7_0_M_AXI_GP0_AWREADY_pin  (  gp0_maxi_awready            ),  // in
-  .processing_system7_0_M_AXI_GP0_BVALID_pin   (  gp0_maxi_bvalid             ),  // in
-  .processing_system7_0_M_AXI_GP0_RLAST_pin    (  gp0_maxi_rlast              ),  // in
-  .processing_system7_0_M_AXI_GP0_RVALID_pin   (  gp0_maxi_rvalid             ),  // in
-  .processing_system7_0_M_AXI_GP0_WREADY_pin   (  gp0_maxi_wready             ),  // in
-  .processing_system7_0_M_AXI_GP0_BID_pin      (  gp0_maxi_bid                ),  // in 12
-  .processing_system7_0_M_AXI_GP0_RID_pin      (  gp0_maxi_rid                ),  // in 12
-  .processing_system7_0_M_AXI_GP0_BRESP_pin    (  gp0_maxi_bresp              ),  // in 2
-  .processing_system7_0_M_AXI_GP0_RRESP_pin    (  gp0_maxi_rresp              ),  // in 2
-  .processing_system7_0_M_AXI_GP0_RDATA_pin    (  gp0_maxi_rdata              ),  // in 32
-  .processing_system7_0_M_AXI_GP0_ARESETN_pin  (  gp0_maxi_arstn              ),  // out
-
- // SPI0
-  .processing_system7_0_SPI0_SS_O_pin     (  spi_ss_o        ),  // out
-  .processing_system7_0_SPI0_SS_I_pin     (  spi_ss_i        ),  // in
-  .processing_system7_0_SPI0_SS1_O_pin    (  spi_ss1_o       ),  // out
-  .processing_system7_0_SPI0_SS2_O_pin    (  spi_ss2_o       ),  // out
-  .processing_system7_0_SPI0_SCLK_I_pin   (  spi_sclk_i      ),  // in
-  .processing_system7_0_SPI0_SCLK_O_pin   (  spi_sclk_o      ),  // out
-  .processing_system7_0_SPI0_MOSI_I_pin   (  spi_mosi_i      ),  // in
-  .processing_system7_0_SPI0_MOSI_O_pin   (  spi_mosi_o      ),  // out
-  .processing_system7_0_SPI0_MISO_I_pin   (  spi_miso_i      ),  // in
-  .processing_system7_0_SPI0_MISO_O_pin   (  spi_miso_o      ),  // out
-  .processing_system7_0_SPI0_SS_T_pin     (                  ),  // out
-  .processing_system7_0_SPI0_MOSI_T_pin   (                  ),  // out
-  .processing_system7_0_SPI0_SCLK_T_pin   (                  ),  // out
-  .processing_system7_0_SPI0_MISO_T_pin   (                  )   // out
- );
-`endif
-
-
-
-//---------------------------------------------------------------------------------
-//
-//  USING VIVADO
-
-`ifdef TOOL_VIVADO
- system_wrapper system_i
- (
- // MIO
+system_wrapper system_i
+(
+// MIO
   .FIXED_IO_mio       (  FIXED_IO_mio                ),
   .FIXED_IO_ps_clk    (  FIXED_IO_ps_clk             ),
   .FIXED_IO_ps_porb   (  FIXED_IO_ps_porb            ),
@@ -313,7 +237,7 @@ BUFG i_fclk3_buf  (.O(fclk_clk_o[3]), .I(fclk_clk[3]));
   .DDR_reset_n        (  DDR_reset_n                 ),
   .DDR_we_n           (  DDR_we_n                    ),
 
- // FCLKs
+// FCLKs
   .FCLK_CLK0          (  fclk_clk[0]                 ),  // out
   .FCLK_CLK1          (  fclk_clk[1]                 ),  // out
   .FCLK_CLK2          (  fclk_clk[2]                 ),  // out
@@ -323,7 +247,7 @@ BUFG i_fclk3_buf  (.O(fclk_clk_o[3]), .I(fclk_clk[3]));
   .FCLK_RESET2_N      (  fclk_rstn[2]                ),  // out
   .FCLK_RESET3_N      (  fclk_rstn[3]                ),  // out
 
- // GP0
+// GP0
   .M_AXI_GP0_arvalid  (  gp0_maxi_arvalid            ),  // out
   .M_AXI_GP0_awvalid  (  gp0_maxi_awvalid            ),  // out
   .M_AXI_GP0_bready   (  gp0_maxi_bready             ),  // out
@@ -363,7 +287,7 @@ BUFG i_fclk3_buf  (.O(fclk_clk_o[3]), .I(fclk_clk[3]));
   .M_AXI_GP0_rresp    (  gp0_maxi_rresp              ),  // in 2
   .M_AXI_GP0_rdata    (  gp0_maxi_rdata              ),  // in 32
 
- // SPI0
+// SPI0
   .SPI0_SS_I          (  spi_ss_i                    ),  // in
   .SPI0_SS_O          (  spi_ss_o                    ),  // out
   .SPI0_SS1_O         (  spi_ss1_o                   ),  // out
@@ -377,13 +301,51 @@ BUFG i_fclk3_buf  (.O(fclk_clk_o[3]), .I(fclk_clk[3]));
   .SPI0_SS_T          (                              ),  // out
   .SPI0_SCLK_T        (                              ),  // out
   .SPI0_MOSI_T        (                              ),  // out
-  .SPI0_MISO_T        (                              )   // out
- );
+  .SPI0_MISO_T        (                              ),  // out
 
- assign gp0_maxi_arstn = fclk_rstn[0] ;
-`endif
+// HP0
+    .S_AXI_HP0_araddr   (hp0_saxi_araddr    ),
+    .S_AXI_HP0_arburst  (hp0_saxi_arburst   ),
+    .S_AXI_HP0_arcache  (hp0_saxi_arcache   ),
+    .S_AXI_HP0_arid     (hp0_saxi_arid      ),
+    .S_AXI_HP0_arlen    (hp0_saxi_arlen     ),
+    .S_AXI_HP0_arlock   (hp0_saxi_arlock    ),
+    .S_AXI_HP0_arprot   (hp0_saxi_arprot    ),
+    .S_AXI_HP0_arqos    (hp0_saxi_arqos     ),
+    .S_AXI_HP0_arready  (hp0_saxi_arready   ),
+    .S_AXI_HP0_arsize   (hp0_saxi_arsize    ),
+    .S_AXI_HP0_arvalid  (hp0_saxi_arvalid   ),
+    .S_AXI_HP0_awaddr   (hp0_saxi_awaddr    ),
+    .S_AXI_HP0_awburst  (hp0_saxi_awburst   ),
+    .S_AXI_HP0_awcache  (hp0_saxi_awcache   ),
+    .S_AXI_HP0_awid     (hp0_saxi_awid      ),
+    .S_AXI_HP0_awlen    (hp0_saxi_awlen     ),
+    .S_AXI_HP0_awlock   (hp0_saxi_awlock    ),
+    .S_AXI_HP0_awprot   (hp0_saxi_awprot    ),
+    .S_AXI_HP0_awqos    (hp0_saxi_awqos     ),
+    .S_AXI_HP0_awready  (hp0_saxi_awready   ),
+    .S_AXI_HP0_awsize   (hp0_saxi_awsize    ),
+    .S_AXI_HP0_awvalid  (hp0_saxi_awvalid   ),
+    .S_AXI_HP0_bid      (hp0_saxi_bid       ),
+    .S_AXI_HP0_bready   (hp0_saxi_bready    ),
+    .S_AXI_HP0_bresp    (hp0_saxi_bresp     ),
+    .S_AXI_HP0_bvalid   (hp0_saxi_bvalid    ),
+    .S_AXI_HP0_rdata    (hp0_saxi_rdata     ),
+    .S_AXI_HP0_rid      (hp0_saxi_rid       ),
+    .S_AXI_HP0_rlast    (hp0_saxi_rlast     ),
+    .S_AXI_HP0_rready   (hp0_saxi_rready    ),
+    .S_AXI_HP0_rresp    (hp0_saxi_rresp     ),
+    .S_AXI_HP0_rvalid   (hp0_saxi_rvalid    ),
+    .S_AXI_HP0_wdata    (hp0_saxi_wdata     ),
+    .S_AXI_HP0_wid      (hp0_saxi_wid       ),
+    .S_AXI_HP0_wlast    (hp0_saxi_wlast     ),
+    .S_AXI_HP0_wready   (hp0_saxi_wready    ),
+    .S_AXI_HP0_wstrb    (hp0_saxi_wstrb     ),
+    .S_AXI_HP0_wvalid   (hp0_saxi_wvalid    )
+);
 
-
+assign gp0_maxi_arstn = fclk_rstn[0] ;
+assign hp0_saxi_arstn = fclk_rstn[0] ;
 
 
 
@@ -459,6 +421,83 @@ i_gp0_slave
   .sys_rdata_i      (  sys_rdata_i             ),  // system read data
   .sys_err_i        (  sys_err_i               ),  // system error indicator
   .sys_ack_i        (  sys_ack_i               )   // system acknowledge signal
+);
+
+
+
+
+
+
+
+//---------------------------------------------------------------------------------
+//
+//  AXI MASTER
+
+axi_dump2ddr_master #(
+    .AXI_DW     (  64     ), // data width (8,16,...,1024)
+    .AXI_AW     (  32     ), // AXI address width
+    .AXI_IW     (   6     ), // AXI ID width
+    .BUF_AW     (  12     ), // buffer address width
+    .BUF_CH     (   2     )  // number of buffered channels
+) i_hp0_master  (
+    .axi_araddr_o   (hp0_saxi_araddr    ),
+    .axi_arburst_o  (hp0_saxi_arburst   ),
+    .axi_arcache_o  (hp0_saxi_arcache   ),
+    .axi_arid_o     (hp0_saxi_arid      ),
+    .axi_arlen_o    (hp0_saxi_arlen     ),
+    .axi_arlock_o   (hp0_saxi_arlock    ),
+    .axi_arprot_o   (hp0_saxi_arprot    ),
+    .axi_arqos_o    (hp0_saxi_arqos     ),
+    .axi_arready_i  (hp0_saxi_arready   ),
+    .axi_arsize_o   (hp0_saxi_arsize    ),
+    .axi_arvalid_o  (hp0_saxi_arvalid   ),
+    .axi_awaddr_o   (hp0_saxi_awaddr    ),
+    .axi_awburst_o  (hp0_saxi_awburst   ),
+    .axi_awcache_o  (hp0_saxi_awcache   ),
+    .axi_awid_o     (hp0_saxi_awid      ),
+    .axi_awlen_o    (hp0_saxi_awlen     ),
+    .axi_awlock_o   (hp0_saxi_awlock    ),
+    .axi_awprot_o   (hp0_saxi_awprot    ),
+    .axi_awqos_o    (hp0_saxi_awqos     ),
+    .axi_awready_i  (hp0_saxi_awready   ),
+    .axi_awsize_o   (hp0_saxi_awsize    ),
+    .axi_awvalid_o  (hp0_saxi_awvalid   ),
+    .axi_bid_i      (hp0_saxi_bid       ),
+    .axi_bready_o   (hp0_saxi_bready    ),
+    .axi_bresp_i    (hp0_saxi_bresp     ),
+    .axi_bvalid_i   (hp0_saxi_bvalid    ),
+    .axi_rdata_i    (hp0_saxi_rdata     ),
+    .axi_rid_i      (hp0_saxi_rid       ),
+    .axi_rlast_i    (hp0_saxi_rlast     ),
+    .axi_rready_o   (hp0_saxi_rready    ),
+    .axi_rresp_i    (hp0_saxi_rresp     ),
+    .axi_rvalid_i   (hp0_saxi_rvalid    ),
+    .axi_wdata_o    (hp0_saxi_wdata     ),
+    .axi_wid_o      (hp0_saxi_wid       ),
+    .axi_wlast_o    (hp0_saxi_wlast     ),
+    .axi_wready_i   (hp0_saxi_wready    ),
+    .axi_wstrb_o    (hp0_saxi_wstrb     ),
+    .axi_wvalid_o   (hp0_saxi_wvalid    ),
+
+    .buf_clk_i      (hp0_saxi_aclk      ),  //
+    .buf_rstn_i     (hp0_saxi_arstn     ),  //
+    .buf_select_o   (adcbuf_select_o    ),  //
+    .buf_ready_i    (adcbuf_ready_i     ),  //
+    //.buf_ack_o      (adcbuf_ack_o       ),  //
+    .buf_raddr_o    (adcbuf_raddr_o     ),  //
+    .buf_rdata_i    (adcbuf_rdata_i     ),  //
+
+    // System bus
+    .sys_clk_i      (sysbus_clk_i       ),  // bus clock
+    .sys_rstn_i     (sysbus_rstn_i      ),  // bus reset - active low
+    .sys_addr_i     (sysbus_addr_i      ),  // bus saddress
+    .sys_wdata_i    (sysbus_wdata_i     ),  // bus write data
+    .sys_sel_i      (sysbus_sel_i       ),  // bus write byte select
+    .sys_wen_i      (sysbus_wen_i       ),  // bus write enable
+    .sys_ren_i      (sysbus_ren_i       ),  // bus read enable
+    .sys_rdata_o    (sysbus_rdata_o     ),  // bus read data
+    .sys_err_o      (sysbus_err_o       ),  // bus error indicator
+    .sys_ack_o      (sysbus_ack_o       )   // bus acknowledge signal
 );
 
 

@@ -212,36 +212,36 @@ red_pitaya_daisy_rx i_rx
 
 
 
-//---------------------------------------------------------------------------------
-//
-//  Testing module
+////---------------------------------------------------------------------------------
+////
+////  Testing module
 
-reg            cfg_tst_clr       ;
+//reg            cfg_tst_clr       ;
 
-wire           tst_dv            ;
-wire [16-1: 0] tst_dat           ;
-wire [32-1: 0] tst_err_cnt       ;
-wire [32-1: 0] tst_dat_cnt       ;
+//wire           tst_dv            ;
+//wire [16-1: 0] tst_dat           ;
+//wire [32-1: 0] tst_err_cnt       ;
+//wire [32-1: 0] tst_dat_cnt       ;
 
-red_pitaya_daisy_test i_test
-(
-   // transmit ports
-  .tx_clk_i        (  par_clk_i         ),
-  .tx_rstn_i       (  par_rstn_i        ),
-  .tx_rdy_i        (  txp_rdy           ),
-  .tx_dv_o         (  tst_dv            ),
-  .tx_dat_o        (  tst_dat           ),
+//red_pitaya_daisy_test i_test
+//(
+//   // transmit ports
+//  .tx_clk_i        (  par_clk_i         ),
+//  .tx_rstn_i       (  par_rstn_i        ),
+//  .tx_rdy_i        (  txp_rdy           ),
+//  .tx_dv_o         (  tst_dv            ),
+//  .tx_dat_o        (  tst_dat           ),
 
-   // receive ports
-  .rx_clk_i        (  rxp_clk           ),
-  .rx_rstn_i       (  rxp_rstn          ),
-  .rx_dv_i         (  rxp_dv            ),
-  .rx_dat_i        (  rxp_dat           ),
+//   // receive ports
+//  .rx_clk_i        (  rxp_clk           ),
+//  .rx_rstn_i       (  rxp_rstn          ),
+//  .rx_dv_i         (  rxp_dv            ),
+//  .rx_dat_i        (  rxp_dat           ),
 
-  .stat_clr_i      (  cfg_tst_clr       ),
-  .stat_err_o      (  tst_err_cnt       ),
-  .stat_dat_o      (  tst_dat_cnt       )
-);
+//  .stat_clr_i      (  cfg_tst_clr       ),
+//  .stat_err_o      (  tst_err_cnt       ),
+//  .stat_dat_o      (  tst_dat_cnt       )
+//);
 
 
 
@@ -300,7 +300,7 @@ always @(*) begin
       3'h2 : begin txp_dat <= tx_cfg_dat    ;   txp_dv <= txp_rdy      ; end  // manual value
       3'h3 : begin txp_dat <= 16'h00FF      ;   txp_dv <= txp_rdy      ; end  // training data
       3'h4 : begin txp_dat <= tx_rx_dat     ;   txp_dv <= tx_rx_dv     ; end  // send back received data
-      3'h5 : begin txp_dat <= tst_dat       ;   txp_dv <= tst_dv       ; end  // random testing data
+//      3'h5 : begin txp_dat <= tst_dat       ;   txp_dv <= tst_dv       ; end  // random testing data
    endcase
 end
 
@@ -357,7 +357,7 @@ always @(posedge sys_clk_i) begin
       cfg_tx_sys_n    <=  1'b0 ;
       cfg_rx_en       <=  1'b0 ;
       cfg_rx_train    <=  1'b0 ;
-      cfg_tst_clr     <=  1'b0 ;
+//      cfg_tst_clr     <=  1'b0 ;
    end
    else begin
       if (sys_wen_i) begin
@@ -366,7 +366,7 @@ always @(posedge sys_clk_i) begin
 
          if (sys_addr_i[19:0]==20'h04)     begin cfg_tx_sys       <= sys_wdata_i      ;     cfg_tx_sys_n <= !cfg_tx_sys_n;    end
          if (sys_addr_i[19:0]==20'h08)           cfg_rx_train     <= sys_wdata_i[  0] ;
-         if (sys_addr_i[19:0]==20'h10)           cfg_tst_clr      <= sys_wdata_i[  0] ;
+//         if (sys_addr_i[19:0]==20'h10)           cfg_tst_clr      <= sys_wdata_i[  0] ;
       end
    end
 end
@@ -385,9 +385,9 @@ always @(posedge sys_clk_i) begin
      20'h00008 : begin sys_ack_o <= sys_ack;       sys_rdata_o <= { 27'h0, cfg_rx_trained, 3'h0, cfg_rx_train }              ; end
      20'h0000C : begin sys_ack_o <= sys_ack;       sys_rdata_o <= { rxp_dat_n, rxp_dat }                                     ; end
 
-     20'h00010 : begin sys_ack_o <= sys_ack;       sys_rdata_o <= { {32-1{1'b0}}, cfg_tst_clr }                              ; end
-     20'h00014 : begin sys_ack_o <= sys_ack;       sys_rdata_o <= { tst_err_cnt }                                            ; end
-     20'h00018 : begin sys_ack_o <= sys_ack;       sys_rdata_o <= { tst_dat_cnt }                                            ; end
+//     20'h00010 : begin sys_ack_o <= sys_ack;       sys_rdata_o <= { {32-1{1'b0}}, cfg_tst_clr }                              ; end
+//     20'h00014 : begin sys_ack_o <= sys_ack;       sys_rdata_o <= { tst_err_cnt }                                            ; end
+//     20'h00018 : begin sys_ack_o <= sys_ack;       sys_rdata_o <= { tst_dat_cnt }                                            ; end
 
        default : begin sys_ack_o <= 1'b1;          sys_rdata_o <=   32'h0                                                    ; end
    endcase

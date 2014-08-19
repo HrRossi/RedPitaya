@@ -1,0 +1,117 @@
+Copyright 1986-2014 Xilinx, Inc. All Rights Reserved.
+-----------------------------------------------------------------------------------
+| Tool Version : Vivado v.2014.2 (win64) Build 928826 Thu Jun  5 18:17:50 MDT 2014
+| Date         : Sun Jul 13 16:20:11 2014
+| Host         : Zock0r running 64-bit Service Pack 1  (build 7601)
+| Command      : upgrade_ip
+| Device       : xc7z010clg400-1
+-----------------------------------------------------------------------------------
+
+Upgrade Log for IP 'system_processing_system7_0_0'
+
+1. Summary
+----------
+
+CAUTION (success, with warnings) in the upgrade of system_processing_system7_0_0 from xilinx.com:ip:processing_system7:5.3 to xilinx.com:ip:processing_system7:5.4 (Rev. 1)
+
+After upgrade, an IP may have parameter and port differences compared to the original customization. Please review the parameters within the IP customization GUI to ensure proper functionality. Also, please review the updated IP instantiation template to ensure proper connectivity, and update your design if required.
+
+2. Interface Information
+------------------------
+
+Detected external interface differences while upgrading IP 'system_processing_system7_0_0'.
+
+
+-upgrade has added interface 'TRIGGER_IN_0'
+-upgrade has added interface 'TRIGGER_IN_1'
+-upgrade has added interface 'TRIGGER_IN_2'
+-upgrade has added interface 'TRIGGER_IN_3'
+-upgrade has added interface 'TRIGGER_OUT_0'
+-upgrade has added interface 'TRIGGER_OUT_1'
+-upgrade has added interface 'TRIGGER_OUT_2'
+-upgrade has added interface 'TRIGGER_OUT_3'
+
+3. Connection Warnings
+----------------------
+
+Detected external port differences while upgrading IP 'system_processing_system7_0_0'. These changes may impact your design.
+
+
+-upgrade has removed port 'TTC0_CLK0_IN'
+-upgrade has removed port 'TTC0_CLK1_IN'
+-upgrade has removed port 'TTC0_CLK2_IN'
+
+4. Upgrade messages
+-------------------
+
+Added parameter PCW_DDR_PRIORITY_WRITEPORT_0 with value Low
+Added parameter PCW_DDR_PRIORITY_WRITEPORT_1 with value Low
+Added parameter PCW_DDR_PRIORITY_WRITEPORT_2 with value Low
+Added parameter PCW_DDR_PRIORITY_WRITEPORT_3 with value Low
+Added parameter PCW_DDR_PRIORITY_READPORT_0 with value Low
+Added parameter PCW_DDR_PRIORITY_READPORT_1 with value Low
+Added parameter PCW_DDR_PRIORITY_READPORT_2 with value Low
+Added parameter PCW_DDR_PRIORITY_READPORT_3 with value Low
+Added parameter PCW_DDR_PORT0_HPR_ENABLE with value 0
+Added parameter PCW_DDR_PORT1_HPR_ENABLE with value 0
+Added parameter PCW_DDR_PORT2_HPR_ENABLE with value 0
+Added parameter PCW_DDR_PORT3_HPR_ENABLE with value 0
+Added parameter PCW_DDR_HPRLPR_QUEUE_PARTITION with value HPR(0)/LPR(32)
+Added parameter PCW_DDR_LPR_TO_CRITICAL_PRIORITY_LEVEL with value 2
+Added parameter PCW_DDR_HPR_TO_CRITICAL_PRIORITY_LEVEL with value 15
+Added parameter PCW_DDR_WRITE_TO_CRITICAL_PRIORITY_LEVEL with value 2
+Added parameter PCW_UIPARAM_DDR_ADV_ENABLE with value 0
+Added parameter PCW_FTM_CTI_IN0 with value DISABLED
+Added parameter PCW_FTM_CTI_IN1 with value DISABLED
+Added parameter PCW_FTM_CTI_IN2 with value DISABLED
+Added parameter PCW_FTM_CTI_IN3 with value DISABLED
+Added parameter PCW_FTM_CTI_OUT0 with value DISABLED
+Added parameter PCW_FTM_CTI_OUT1 with value DISABLED
+Added parameter PCW_FTM_CTI_OUT2 with value DISABLED
+Added parameter PCW_FTM_CTI_OUT3 with value DISABLED
+Added parameter PCW_IRQ_F2P_MODE with value REVERSE
+Added parameter PCW_USB_RESET_POLARITY with value Active Low
+Added parameter PCW_ENET_RESET_POLARITY with value Active Low
+Added parameter PCW_I2C_RESET_POLARITY with value Active Low
+Added parameter PCW_DCI_PERIPHERAL_CLKSRC with value 1
+Added parameter PCW_PCAP_PERIPHERAL_CLKSRC with value 1
+Added parameter PCW_CPU_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_DDR_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_SMC_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_QSPI_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_SDIO_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_UART_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_SPI_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_FCLK0_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_FCLK1_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_FCLK2_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_FCLK3_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_FCLK0_PERIPHERAL_DIVISOR1 with value 1
+Added parameter PCW_FCLK1_PERIPHERAL_DIVISOR1 with value 1
+Added parameter PCW_FCLK2_PERIPHERAL_DIVISOR1 with value 1
+Added parameter PCW_FCLK3_PERIPHERAL_DIVISOR1 with value 1
+Added parameter PCW_ENET0_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_ENET1_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_ENET0_PERIPHERAL_DIVISOR1 with value 1
+Added parameter PCW_ENET1_PERIPHERAL_DIVISOR1 with value 1
+Added parameter PCW_CAN_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_CAN_PERIPHERAL_DIVISOR1 with value 1
+Added parameter PCW_TPIU_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_DCI_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_DCI_PERIPHERAL_DIVISOR1 with value 1
+Added parameter PCW_PCAP_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_TTC0_CLK0_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_TTC0_CLK1_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_TTC0_CLK2_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_TTC1_CLK0_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_TTC1_CLK1_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_TTC1_CLK2_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_OVERRIDE_BASIC_CLOCK with value 0
+Added parameter PCW_WDT_PERIPHERAL_DIVISOR0 with value 1
+Added parameter PCW_ARMPLL_CTRL_FBDIV with value 1
+Added parameter PCW_IOPLL_CTRL_FBDIV with value 1
+Added parameter PCW_DDRPLL_CTRL_FBDIV with value 1
+Added parameter PCW_USE_CORESIGHT with value 0
+Removed parameter PCW_USE_DAP_ROM
+Added parameter PCW_TRACE_PIPELINE_WIDTH with value 8
+

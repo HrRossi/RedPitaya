@@ -7,7 +7,7 @@
   <spirit:componentInstances>
     <spirit:componentInstance>
       <spirit:instanceName>system_processing_system7_0_0</spirit:instanceName>
-      <spirit:componentRef spirit:vendor="xilinx.com" spirit:library="ip" spirit:name="processing_system7" spirit:version="5.3"/>
+      <spirit:componentRef spirit:vendor="xilinx.com" spirit:library="ip" spirit:name="processing_system7" spirit:version="5.4"/>
       <spirit:configurableElementValues>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_RAM_BASEADDR">0x00100000</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_RAM_HIGHADDR">0x1FFFFFFF</spirit:configurableElementValue>
@@ -174,6 +174,45 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CLK1_FREQ">250000000</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CLK2_FREQ">50000000</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CLK3_FREQ">200000000</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_OVERRIDE_BASIC_CLOCK">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CPU_PERIPHERAL_DIVISOR0">2</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PERIPHERAL_DIVISOR0">2</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_SMC_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_QSPI_PERIPHERAL_DIVISOR0">8</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_SDIO_PERIPHERAL_DIVISOR0">8</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UART_PERIPHERAL_DIVISOR0">10</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_SPI_PERIPHERAL_DIVISOR0">6</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CAN_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CAN_PERIPHERAL_DIVISOR1">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FCLK0_PERIPHERAL_DIVISOR0">8</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FCLK1_PERIPHERAL_DIVISOR0">4</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FCLK2_PERIPHERAL_DIVISOR0">20</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FCLK3_PERIPHERAL_DIVISOR0">5</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FCLK0_PERIPHERAL_DIVISOR1">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FCLK1_PERIPHERAL_DIVISOR1">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FCLK2_PERIPHERAL_DIVISOR1">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FCLK3_PERIPHERAL_DIVISOR1">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_ENET0_PERIPHERAL_DIVISOR0">8</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_ENET1_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_ENET0_PERIPHERAL_DIVISOR1">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_ENET1_PERIPHERAL_DIVISOR1">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TPIU_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DCI_PERIPHERAL_DIVISOR0">35</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DCI_PERIPHERAL_DIVISOR1">3</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_PCAP_PERIPHERAL_DIVISOR0">5</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TTC0_CLK0_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TTC0_CLK1_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TTC0_CLK2_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TTC1_CLK0_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TTC1_CLK1_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TTC1_CLK2_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_WDT_PERIPHERAL_DIVISOR0">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_ARMPLL_CTRL_FBDIV">40</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_IOPLL_CTRL_FBDIV">30</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDRPLL_CTRL_FBDIV">32</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CPU_CPU_PLL_FREQMHZ">1333.333</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_IO_IO_PLL_FREQMHZ">1000.000</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_DDR_PLL_FREQMHZ">1066.667</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_SMC_PERIPHERAL_VALID">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_SDIO_PERIPHERAL_VALID">1</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_SPI_PERIPHERAL_VALID">1</spirit:configurableElementValue>
@@ -207,7 +246,7 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_S_AXI_GP0">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_S_AXI_GP1">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_S_AXI_ACP">0</spirit:configurableElementValue>
-        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_S_AXI_HP0">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_S_AXI_HP0">1</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_S_AXI_HP1">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_S_AXI_HP2">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_S_AXI_HP3">0</spirit:configurableElementValue>
@@ -216,7 +255,7 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_S_AXI_GP0_FREQMHZ">10</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_S_AXI_GP1_FREQMHZ">10</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_S_AXI_ACP_FREQMHZ">10</spirit:configurableElementValue>
-        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_S_AXI_HP0_FREQMHZ">10</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_S_AXI_HP0_FREQMHZ">125</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_S_AXI_HP1_FREQMHZ">10</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_S_AXI_HP2_FREQMHZ">10</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_S_AXI_HP3_FREQMHZ">10</spirit:configurableElementValue>
@@ -225,11 +264,20 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_DMA2">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_DMA3">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_TRACE">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TRACE_PIPELINE_WIDTH">8</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_INCLUDE_TRACE_BUFFER">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TRACE_BUFFER_FIFO_SIZE">128</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_TRACE_DATA_EDGE_DETECTOR">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TRACE_BUFFER_CLOCK_DELAY">12</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_CROSS_TRIGGER">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FTM_CTI_IN0">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FTM_CTI_IN1">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FTM_CTI_IN2">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FTM_CTI_IN3">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FTM_CTI_OUT0">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FTM_CTI_OUT1">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FTM_CTI_OUT2">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_FTM_CTI_OUT3">&lt;Select></spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_DEBUG">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_CR_FABRIC">1</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_AXI_FABRIC_IDLE">0</spirit:configurableElementValue>
@@ -240,7 +288,7 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_HIGH_OCM">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_PS_SLCR_REGISTERS">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_EXPANDED_PS_SLCR_REGISTERS">0</spirit:configurableElementValue>
-        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_DAP_ROM">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USE_CORESIGHT">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_EN_EMIO_SRAM_INT">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_GPIO_EMIO_GPIO_WIDTH">64</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UART0_BAUD_RATE">115200</spirit:configurableElementValue>
@@ -339,6 +387,7 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_P2F_UART1_INTR">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_P2F_CAN1_INTR">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_IRQ_F2P_INTR">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_IRQ_F2P_MODE">REVERSE</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CORE0_FIQ_INTR">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CORE0_IRQ_INTR">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_CORE1_FIQ_INTR">0</spirit:configurableElementValue>
@@ -349,6 +398,7 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_PRESET_BANK0_VOLTAGE">LVCMOS 3.3V</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_PRESET_BANK1_VOLTAGE">LVCMOS 2.5V</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UIPARAM_DDR_ENABLE">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UIPARAM_DDR_ADV_ENABLE">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UIPARAM_DDR_MEMORY_TYPE">DDR 3</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UIPARAM_DDR_ECC">Disabled</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UIPARAM_DDR_BUS_WIDTH">16 Bit</spirit:configurableElementValue>
@@ -363,6 +413,22 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UIPARAM_DDR_TRAIN_DATA_EYE">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UIPARAM_DDR_CLOCK_STOP_EN">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_UIPARAM_DDR_USE_INTERNAL_VREF">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PRIORITY_WRITEPORT_0">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PRIORITY_WRITEPORT_1">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PRIORITY_WRITEPORT_2">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PRIORITY_WRITEPORT_3">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PRIORITY_READPORT_0">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PRIORITY_READPORT_1">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PRIORITY_READPORT_2">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PRIORITY_READPORT_3">&lt;Select></spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PORT0_HPR_ENABLE">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PORT1_HPR_ENABLE">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PORT2_HPR_ENABLE">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_PORT3_HPR_ENABLE">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_HPRLPR_QUEUE_PARTITION">HPR(0)/LPR(32)</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_LPR_TO_CRITICAL_PRIORITY_LEVEL">2</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_HPR_TO_CRITICAL_PRIORITY_LEVEL">15</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DDR_WRITE_TO_CRITICAL_PRIORITY_LEVEL">2</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_NAND_PERIPHERAL_ENABLE">0</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_NAND_NAND_IO">&lt;Select></spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_NAND_GRP_D8_ENABLE">0</spirit:configurableElementValue>
@@ -524,6 +590,11 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TTC1_CLK1_PERIPHERAL_CLKSRC">CPU_1X</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_TTC1_CLK2_PERIPHERAL_CLKSRC">CPU_1X</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_WDT_PERIPHERAL_CLKSRC">CPU_1X</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_DCI_PERIPHERAL_CLKSRC">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_PCAP_PERIPHERAL_CLKSRC">1</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_USB_RESET_POLARITY">Active Low</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_ENET_RESET_POLARITY">Active Low</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_I2C_RESET_POLARITY">Active Low</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_0_PULLUP">enabled</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_0_IOTYPE">LVCMOS 3.3V</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_0_DIRECTION">inout</spirit:configurableElementValue>
@@ -722,7 +793,7 @@
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_48_SLEW">slow</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_49_PULLUP">enabled</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_49_IOTYPE">LVCMOS 2.5V</spirit:configurableElementValue>
-        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_49_DIRECTION">out</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_49_DIRECTION">inout</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_49_SLEW">slow</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_50_PULLUP">enabled</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PARAM_VALUE.PCW_MIO_50_IOTYPE">LVCMOS 2.5V</spirit:configurableElementValue>
@@ -797,8 +868,6 @@
         <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.DEVICE">xc7z010</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.PACKAGE">clg400</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.SPEEDGRADE">-1</spirit:configurableElementValue>
-        <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.TEMPERATURE_GRADE">C</spirit:configurableElementValue>
-        <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.SILICON_REVISION"/>
         <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.PREFHDL">VERILOG</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.SIMULATOR_LANGUAGE">MIXED</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.USE_RDI_CUSTOMIZATION">TRUE</spirit:configurableElementValue>
@@ -806,10 +875,11 @@
         <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.USER_REPO_PATHS"/>
         <spirit:configurableElementValue spirit:referenceId="PROJECT_PARAM.BOARD"/>
         <spirit:configurableElementValue spirit:referenceId="RUNTIME_PARAM.MANAGED">TRUE</spirit:configurableElementValue>
-        <spirit:configurableElementValue spirit:referenceId="RUNTIME_PARAM.SWVERSION">2013.3</spirit:configurableElementValue>
-        <spirit:configurableElementValue spirit:referenceId="RUNTIME_PARAM.IPREVISION">0</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="RUNTIME_PARAM.SWVERSION">2014.2</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="RUNTIME_PARAM.IPREVISION">1</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="RUNTIME_PARAM.SYNTHESISFLOW">OUT_OF_CONTEXT</spirit:configurableElementValue>
         <spirit:configurableElementValue spirit:referenceId="RUNTIME_PARAM.OUTPUTDIR">.</spirit:configurableElementValue>
+        <spirit:configurableElementValue spirit:referenceId="RUNTIME_PARAM.SHAREDDIR">../../../../ipshared</spirit:configurableElementValue>
       </spirit:configurableElementValues>
     </spirit:componentInstance>
   </spirit:componentInstances>

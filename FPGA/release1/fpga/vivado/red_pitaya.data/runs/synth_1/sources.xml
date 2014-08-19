@@ -42,16 +42,6 @@
         <Attr Name="UsedIn" Val="simulation"/>
       </FileInfo>
     </File>
-    <File Path="$PPRDIR/../code/rtl/red_pitaya_daisy_test.v">
-      <FileInfo>
-        <Attr Name="UsedInSynthesis" Val="1"/>
-        <Attr Name="UsedInImplementation" Val="1"/>
-        <Attr Name="UsedInSimulation" Val="1"/>
-        <Attr Name="UsedIn" Val="synthesis"/>
-        <Attr Name="UsedIn" Val="implementation"/>
-        <Attr Name="UsedIn" Val="simulation"/>
-      </FileInfo>
-    </File>
     <File Path="$PPRDIR/../code/rtl/red_pitaya_daisy_rx.v">
       <FileInfo>
         <Attr Name="UsedInSynthesis" Val="1"/>
@@ -173,16 +163,6 @@
       </FileInfo>
     </File>
     <File Path="$PPRDIR/../code/rtl/red_pitaya_top.v">
-      <FileInfo>
-        <Attr Name="UsedInSynthesis" Val="1"/>
-        <Attr Name="UsedInImplementation" Val="1"/>
-        <Attr Name="UsedInSimulation" Val="1"/>
-        <Attr Name="UsedIn" Val="synthesis"/>
-        <Attr Name="UsedIn" Val="implementation"/>
-        <Attr Name="UsedIn" Val="simulation"/>
-      </FileInfo>
-    </File>
-    <File Path="$PPRDIR/../code/rtl/red_pitaya_test.v">
       <FileInfo>
         <Attr Name="UsedInSynthesis" Val="1"/>
         <Attr Name="UsedInImplementation" Val="1"/>
