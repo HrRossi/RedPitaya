@@ -166,6 +166,17 @@ wire [ 4-1:0]   adcbuf_ready;   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k,
 wire [12-1:0]   adcbuf_raddr;   // buffer read address
 wire [64-1:0]   adcbuf_rdata;   // buffer read data
 
+`ifndef DDRDUMP_WITH_SYSBUS
+// DDR Dump parameters
+wire    [   32-1:0] ddr_a_base; // DDR ChA buffer base address
+wire    [   32-1:0] ddr_a_end;  // DDR ChA buffer end address + 1
+wire    [   32-1:0] ddr_a_curr; // DDR ChA current write address
+wire    [   32-1:0] ddr_b_base; // DDR ChB buffer base address
+wire    [   32-1:0] ddr_b_end;  // DDR ChB buffer end address + 1
+wire    [   32-1:0] ddr_b_curr; // DDR ChB current write address
+wire    [    2-1:0] ddr_enable; // DDR dump enable flag A/B
+`endif
+
 //---------------------------------------------------------------------------------
 //
 //  system bus decoder & multiplexer
@@ -222,7 +233,11 @@ assign ps_sys_ack   = sys_cs[ 0] & sys_ack[  0] |
                       sys_cs[ 6] & sys_ack[  6] |
                       sys_cs[ 7] & sys_ack[  7] ; 
 
-
+`ifndef DDRDUMP_WITH_SYSBUS
+assign sys_rdata[ 6*32+31: 6*32] = 32'h0;
+assign sys_err[6] = 1'b0;
+assign sys_ack[6] = 1'b1;
+`endif
 assign sys_rdata[ 7*32+31: 7*32] = 32'h0;
 assign sys_err[7] = 1'b0;
 assign sys_ack[7] = 1'b1;
@@ -288,6 +303,16 @@ red_pitaya_ps i_ps
     .adcbuf_raddr_o     (adcbuf_raddr           ),  //
     .adcbuf_rdata_i     (adcbuf_rdata           ),  //
 
+`ifndef DDRDUMP_WITH_SYSBUS
+    // DDR Dump parameter export
+    .ddr_a_base     (ddr_a_base                 ),  // DDR ChA buffer base address
+    .ddr_a_end      (ddr_a_end                  ),  // DDR ChA buffer end address + 1
+    .ddr_a_curr     (ddr_a_curr                 ),  // DDR ChA current write address
+    .ddr_b_base     (ddr_b_base                 ),  // DDR ChB buffer base address
+    .ddr_b_end      (ddr_b_end                  ),  // DDR ChB buffer end address + 1
+    .ddr_b_curr     (ddr_b_curr                 ),  // DDR ChB current write address
+    .ddr_enable     (ddr_enable                 )   // DDR dump enable flag A/B
+`else
     // System bus region 6
     .sysbus_clk_i       (sys_clk                ),  // clock
     .sysbus_rstn_i      (sys_rstn               ),  // reset - active low
@@ -299,6 +324,7 @@ red_pitaya_ps i_ps
     .sysbus_rdata_o     (sys_rdata[6*32+31:6*32]),  // read data
     .sysbus_err_o       (sys_err[6]             ),  // error indicator
     .sysbus_ack_o       (sys_ack[6]             )   // acknowledge signal
+`endif
 );
 
 
@@ -457,14 +483,24 @@ red_pitaya_scope i_scope
   .sys_err_o       (  sys_err[1]                 ),  // error indicator
   .sys_ack_o       (  sys_ack[1]                 ),  // acknowledge signal
 
+`ifndef DDRDUMP_WITH_SYSBUS
+    // DDR Dump parameter export
+    .ddr_a_base         (ddr_a_base         ),  // DDR ChA buffer base address
+    .ddr_a_end          (ddr_a_end          ),  // DDR ChA buffer end address + 1
+    .ddr_a_curr         (ddr_a_curr         ),  // DDR ChA current write address
+    .ddr_b_base         (ddr_b_base         ),  // DDR ChB buffer base address
+    .ddr_b_end          (ddr_b_end          ),  // DDR ChB buffer end address + 1
+    .ddr_b_curr         (ddr_b_curr         ),  // DDR ChB current write address
+    .ddr_enable         (ddr_enable         ),  // DDR dump enable flag A/B
+`endif
     // ADC data buffer
-    .adcbuf_clk_i      (fclk[0]            ),  // clock
-    .adcbuf_rstn_i     (frstn[0]           ),  // reset
-    .adcbuf_select_i   (adcbuf_select      ),  // channel buffer select
-    .adcbuf_ready_o    (adcbuf_ready       ),  // buffer ready
-    //.adcbuf_ack_i      (adcbuf_ack         ),  // buffer ready acknowledge
-    .adcbuf_raddr_i    (adcbuf_raddr       ),  // buffer read address
-    .adcbuf_rdata_o    (adcbuf_rdata       )   // buffer read data
+    .adcbuf_clk_i       (fclk[0]            ),  // clock
+    .adcbuf_rstn_i      (frstn[0]           ),  // reset
+    .adcbuf_select_i    (adcbuf_select      ),  // channel buffer select
+    .adcbuf_ready_o     (adcbuf_ready       ),  // buffer ready
+    //.adcbuf_ack_i       (adcbuf_ack         ),  // buffer ready acknowledge
+    .adcbuf_raddr_i     (adcbuf_raddr       ),  // buffer read address
+    .adcbuf_rdata_o     (adcbuf_rdata       )   // buffer read data
 );
 
 

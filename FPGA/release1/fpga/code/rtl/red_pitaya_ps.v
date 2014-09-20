@@ -103,6 +103,16 @@ module red_pitaya_ps
     output [12-1:0] adcbuf_raddr_o  ,
     input  [64-1:0] adcbuf_rdata_i  ,
 
+`ifndef DDRDUMP_WITH_SYSBUS
+    // parameter export
+    input   [   32-1:0] ddr_a_base  ,   // DDR ChA buffer base address
+    input   [   32-1:0] ddr_a_end   ,   // DDR ChA buffer end address + 1
+    output  [   32-1:0] ddr_a_curr  ,   // DDR ChA current write address
+    input   [   32-1:0] ddr_b_base  ,   // DDR ChB buffer base address
+    input   [   32-1:0] ddr_b_end   ,   // DDR ChB buffer end address + 1
+    output  [   32-1:0] ddr_b_curr  ,   // DDR ChB current write address
+    input   [    2-1:0] ddr_enable      // DDR dump enable flag A/B
+`else
     // System bus
     input           sysbus_clk_i    ,   //!< bus clock
     input           sysbus_rstn_i   ,   //!< bus reset - active low
@@ -114,6 +124,7 @@ module red_pitaya_ps
     output [32-1:0] sysbus_rdata_o  ,   //!< bus read data
     output          sysbus_err_o    ,   //!< bus error indicator
     output          sysbus_ack_o        //!< bus acknowledge signal
+`endif
 );
 
 
@@ -487,6 +498,16 @@ axi_dump2ddr_master #(
     .buf_raddr_o    (adcbuf_raddr_o     ),  //
     .buf_rdata_i    (adcbuf_rdata_i     ),  //
 
+`ifndef DDRDUMP_WITH_SYSBUS
+    // parameter export
+    .ddr_a_base     (ddr_a_base         ),
+    .ddr_a_end      (ddr_a_end          ),
+    .ddr_a_curr     (ddr_a_curr         ),
+    .ddr_b_base     (ddr_b_base         ),
+    .ddr_b_end      (ddr_b_end          ),
+    .ddr_b_curr     (ddr_b_curr         ),
+    .ddr_enable     (ddr_enable         )
+`else
     // System bus
     .sys_clk_i      (sysbus_clk_i       ),  // bus clock
     .sys_rstn_i     (sysbus_rstn_i      ),  // bus reset - active low
@@ -498,6 +519,7 @@ axi_dump2ddr_master #(
     .sys_rdata_o    (sysbus_rdata_o     ),  // bus read data
     .sys_err_o      (sysbus_err_o       ),  // bus error indicator
     .sys_ack_o      (sysbus_ack_o       )   // bus acknowledge signal
+`endif
 );
 
 

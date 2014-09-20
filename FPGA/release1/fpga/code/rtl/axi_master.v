@@ -73,6 +73,16 @@ module axi_dump2ddr_master #(
     output [    BUF_AW-1:0] buf_raddr_o ,
     input  [    AXI_DW-1:0] buf_rdata_i ,
 
+`ifndef DDRDUMP_WITH_SYSBUS
+    // parameter export
+    input       [   32-1:0] ddr_a_base  ,   // DDR ChA buffer base address
+    input       [   32-1:0] ddr_a_end   ,   // DDR ChA buffer end address + 1
+    output reg  [   32-1:0] ddr_a_curr  ,   // DDR ChA current write address
+    input       [   32-1:0] ddr_b_base  ,   // DDR ChB buffer base address
+    input       [   32-1:0] ddr_b_end   ,   // DDR ChB buffer end address + 1
+    output reg  [   32-1:0] ddr_b_curr  ,   // DDR ChB current write address
+    input       [    2-1:0] ddr_enable      // DDR dump enable flag A/B
+`else
     // System bus
     input               sys_clk_i       ,   // bus clock
     input               sys_rstn_i      ,   // bus reset - active low
@@ -84,10 +94,11 @@ module axi_dump2ddr_master #(
     output   [ 32-1: 0] sys_rdata_o     ,   // bus read data
     output              sys_err_o       ,   // bus error indicator
     output              sys_ack_o           // bus acknowledge signal
+`endif
 );
 
-localparam AXI_CW = 4;
-localparam AXI_CI = 4'hf;
+localparam AXI_CW = 4;      // width of the ID expiry counters
+localparam AXI_CI = 4'hf;   // initial countdown value for the ID expiry counters
 genvar CNT;
 
 
@@ -119,10 +130,12 @@ assign  axi_wstrb_o   = 8'b11111111;    // write all bytes
 
 
 // --------------------------------------------------------------------------------------------------
-// process ready latches
-reg  [ 4-1:0]   buf_ready;
-wire [ 4-1:0]   buf_finished;
-reg  [ 2-1:0]   ddr_enable;
+// process ready latches from scope
+reg  [ 4-1:0]   buf_ready;      // scope buffer ready registers Al,Ah,Bl,Bh
+wire [ 4-1:0]   buf_finished;   // signals end of buffer processing Al,Ah,Bl,Bh
+`ifdef DDRDUMP_WITH_SYSBUS
+reg  [ 2-1:0]   ddr_enable;     // DDR dump enable flag A/B
+`endif
 
 always @(posedge buf_clk_i) begin
     if (!buf_rstn_i) begin
@@ -169,18 +182,21 @@ reg  [       2-1:0] buf_sel;        // select signals for Cha / ChB
 reg                 buf_sel_ab;     // stores the currently active channel
 reg  [      12-1:0] buf_rp;         // BRAM read pointer
 reg  [      32-1:0] ddr_wp;         // DDR write pointer
+`ifdef DDRDUMP_WITH_SYSBUS
 reg  [      32-1:0] ddr_a_base;     // DDR ChA buffer base address
 reg  [      32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
 reg  [      32-1:0] ddr_a_curr;     // DDR ChA current write address
 reg  [      32-1:0] ddr_b_base;     // DDR ChB buffer base address
 reg  [      32-1:0] ddr_b_end;      // DDR ChB buffer end address + 1
 reg  [      32-1:0] ddr_b_curr;     // DDR ChB current write address
+`endif
 reg  [8*AXI_CW-1:0] ddr_id_cnt;     // write ID expiry counters ID0-7
 reg                 tx_running;     // flag buffer transmission in progress
 reg                 burst_running;  // flag burst in progress
 reg  [  AXI_IW-1:0] ddr_curr_id;    // current write ID
 reg                 ddr_aw_valid;   // flag next write address valid
 
+// internal auxiliary signals
 wire [       8-1:0] ddr_id_busy     = {|ddr_id_cnt[7*AXI_CW+:AXI_CW],|ddr_id_cnt[6*AXI_CW+:AXI_CW],|ddr_id_cnt[5*AXI_CW+:AXI_CW],|ddr_id_cnt[4*AXI_CW+:AXI_CW],
                                        |ddr_id_cnt[3*AXI_CW+:AXI_CW],|ddr_id_cnt[2*AXI_CW+:AXI_CW],|ddr_id_cnt[1*AXI_CW+:AXI_CW],|ddr_id_cnt[0*AXI_CW+:AXI_CW]};
 wire                ddr_id_free     = (ddr_id_busy != 8'b11111111);
@@ -254,7 +270,7 @@ always @(posedge buf_clk_i) begin
         end
 
         if (start_new_tx) begin
-            buf_sel_ab <= (buf_newready[0] | buf_newready[1]) ? 1'b0 : 1'b1;
+            buf_sel_ab <= !(buf_newready[0] | buf_newready[1]);
         end else begin
             buf_sel_ab <= buf_sel_ab;
         end
@@ -399,6 +415,7 @@ end
 end end endgenerate
 
 
+`ifdef DDRDUMP_WITH_SYSBUS
 // --------------------------------------------------------------------------------------------------
 // system bus connection
 wire [32-1:0]   addr;
@@ -474,6 +491,7 @@ bus_clk_bridge i_bridge
     .err_i          (err            ),
     .ack_i          (ack            )
 );
+`endif
 
 
 endmodule

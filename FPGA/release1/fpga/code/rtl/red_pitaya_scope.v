@@ -73,6 +73,16 @@ module red_pitaya_scope
    output                sys_err_o       ,  //!< bus error indicator
    output                sys_ack_o       ,  //!< bus acknowledge signal
 
+`ifndef DDRDUMP_WITH_SYSBUS
+    // DDR Dump parameter export
+    output reg  [   32-1:0] ddr_a_base  ,   // DDR ChA buffer base address
+    output reg  [   32-1:0] ddr_a_end   ,   // DDR ChA buffer end address + 1
+    input       [   32-1:0] ddr_a_curr  ,   // DDR ChA current write address
+    output reg  [   32-1:0] ddr_b_base  ,   // DDR ChB buffer base address
+    output reg  [   32-1:0] ddr_b_end   ,   // DDR ChB buffer end address + 1
+    input       [   32-1:0] ddr_b_curr  ,   // DDR ChB current write address
+    output reg  [    2-1:0] ddr_enable  ,   // DDR dump enable flag A/B
+`endif
     // Remote ADC buffer readout
     input           adcbuf_clk_i        ,   // clock
     input           adcbuf_rstn_i       ,   // reset
@@ -545,6 +555,13 @@ always @(posedge adc_clk_i) begin
       set_b_filt_bb <=  25'h0      ;
       set_b_filt_kk <=  25'hFFFFFF ;
       set_b_filt_pp <=  25'h0      ;
+`ifndef DDRDUMP_WITH_SYSBUS
+        ddr_a_base <= 32'h00000000;
+        ddr_a_end  <= 32'h00000000;
+        ddr_b_base <= 32'h00000000;
+        ddr_b_end  <= 32'h00000000;
+        ddr_enable <= 2'b00;
+`endif
    end
    else begin
       if (wen) begin
@@ -564,6 +581,14 @@ always @(posedge adc_clk_i) begin
          if (addr[19:0]==20'h44)   set_b_filt_bb <= wdata[25-1:0] ;
          if (addr[19:0]==20'h48)   set_b_filt_kk <= wdata[25-1:0] ;
          if (addr[19:0]==20'h4C)   set_b_filt_pp <= wdata[25-1:0] ;
+
+`ifndef DDRDUMP_WITH_SYSBUS
+            if (addr[19:0]==20'h60) ddr_a_base <= wdata;
+            if (addr[19:0]==20'h64) ddr_a_end  <= wdata;
+            if (addr[19:0]==20'h68) ddr_b_base <= wdata;
+            if (addr[19:0]==20'h6c) ddr_b_end  <= wdata;
+            if (addr[19:0]==20'h70) ddr_enable <= wdata[2-1:0];
+`endif
       end
    end
 end
@@ -575,7 +600,7 @@ end
 always @(*) begin
    err <= 1'b0 ;
 
-   casez (addr[19:0])
+   case (addr[19:0])
      20'h00004 : begin ack <= 1'b1;          rdata <= {{32- 4{1'b0}}, set_trig_src}       ; end 
 
      20'h00008 : begin ack <= 1'b1;          rdata <= {{32-16{1'b0}}, set_a_tresh}        ; end
@@ -599,6 +624,11 @@ always @(*) begin
      20'h00044 : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_bb}      ; end
      20'h00048 : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_kk}      ; end
      20'h0004C : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_pp}      ; end
+
+`ifndef DDRDUMP_WITH_SYSBUS
+    20'h00074:  begin   ack <= 1'b1;    rdata <= ddr_a_curr;    end
+    20'h00078:  begin   ack <= 1'b1;    rdata <= ddr_b_curr;    end
+`endif
 
        default : begin ack <= 1'b1;          rdata <=  32'h0                              ; end
    endcase
