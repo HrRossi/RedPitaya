@@ -70,10 +70,10 @@ module bus_clk_bridge
 reg            sys_rd    ;
 reg            sys_wr    ;
 reg            sys_do    ;
-reg  [ 2-1: 0] sys_sync  ;
+(* ASYNC_REG="true" *)  reg  [ 2-1: 0] sys_sync  ;
 reg            sys_done  ;
 reg            dst_do    ;
-reg  [ 2-1: 0] dst_sync  ;
+(* ASYNC_REG="true" *)  reg  [ 2-1: 0] dst_sync  ;
 reg            dst_done  ;
 
 always @(posedge sys_clk_i) begin

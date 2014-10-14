@@ -99,19 +99,18 @@ module red_pitaya_ps
     // ADC data buffer
     output [   1:0] adcbuf_select_o ,
     input  [ 4-1:0] adcbuf_ready_i  ,   // [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
-    //output [ 4-1:0] adcbuf_ack_o    ,   // [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
     output [12-1:0] adcbuf_raddr_o  ,
     input  [64-1:0] adcbuf_rdata_i  ,
 
 `ifndef DDRDUMP_WITH_SYSBUS
     // parameter export
-    input   [   32-1:0] ddr_a_base  ,   // DDR ChA buffer base address
-    input   [   32-1:0] ddr_a_end   ,   // DDR ChA buffer end address + 1
-    output  [   32-1:0] ddr_a_curr  ,   // DDR ChA current write address
-    input   [   32-1:0] ddr_b_base  ,   // DDR ChB buffer base address
-    input   [   32-1:0] ddr_b_end   ,   // DDR ChB buffer end address + 1
-    output  [   32-1:0] ddr_b_curr  ,   // DDR ChB current write address
-    input   [    2-1:0] ddr_enable      // DDR dump enable flag A/B
+    input   [   32-1:0] ddr_a_base_i,   // DDR ChA buffer base address
+    input   [   32-1:0] ddr_a_end_i ,   // DDR ChA buffer end address + 1
+    output  [   32-1:0] ddr_a_curr_o,   // DDR ChA current write address
+    input   [   32-1:0] ddr_b_base_i,   // DDR ChB buffer base address
+    input   [   32-1:0] ddr_b_end_i ,   // DDR ChB buffer end address + 1
+    output  [   32-1:0] ddr_b_curr_o,   // DDR ChB current write address
+    input   [    4-1:0] ddr_control_i   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
 `else
     // System bus
     input           sysbus_clk_i    ,   //!< bus clock
@@ -494,19 +493,18 @@ axi_dump2ddr_master #(
     .buf_rstn_i     (hp0_saxi_arstn     ),  //
     .buf_select_o   (adcbuf_select_o    ),  //
     .buf_ready_i    (adcbuf_ready_i     ),  //
-    //.buf_ack_o      (adcbuf_ack_o       ),  //
     .buf_raddr_o    (adcbuf_raddr_o     ),  //
     .buf_rdata_i    (adcbuf_rdata_i     ),  //
 
 `ifndef DDRDUMP_WITH_SYSBUS
     // parameter export
-    .ddr_a_base     (ddr_a_base         ),
-    .ddr_a_end      (ddr_a_end          ),
-    .ddr_a_curr     (ddr_a_curr         ),
-    .ddr_b_base     (ddr_b_base         ),
-    .ddr_b_end      (ddr_b_end          ),
-    .ddr_b_curr     (ddr_b_curr         ),
-    .ddr_enable     (ddr_enable         )
+    .ddr_a_base_i   (ddr_a_base_i       ),
+    .ddr_a_end_i    (ddr_a_end_i        ),
+    .ddr_a_curr_o   (ddr_a_curr_o       ),
+    .ddr_b_base_i   (ddr_b_base_i       ),
+    .ddr_b_end_i    (ddr_b_end_i        ),
+    .ddr_b_curr_o   (ddr_b_curr_o       ),
+    .ddr_control_i  (ddr_control_i      )
 `else
     // System bus
     .sys_clk_i      (sysbus_clk_i       ),  // bus clock

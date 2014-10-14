@@ -75,13 +75,13 @@ module axi_dump2ddr_master #(
 
 `ifndef DDRDUMP_WITH_SYSBUS
     // parameter export
-    input       [   32-1:0] ddr_a_base  ,   // DDR ChA buffer base address
-    input       [   32-1:0] ddr_a_end   ,   // DDR ChA buffer end address + 1
-    output reg  [   32-1:0] ddr_a_curr  ,   // DDR ChA current write address
-    input       [   32-1:0] ddr_b_base  ,   // DDR ChB buffer base address
-    input       [   32-1:0] ddr_b_end   ,   // DDR ChB buffer end address + 1
-    output reg  [   32-1:0] ddr_b_curr  ,   // DDR ChB current write address
-    input       [    2-1:0] ddr_enable      // DDR dump enable flag A/B
+    input       [   32-1:0] ddr_a_base_i ,  // DDR ChA buffer base address
+    input       [   32-1:0] ddr_a_end_i  ,  // DDR ChA buffer end address + 1
+    output      [   32-1:0] ddr_a_curr_o ,  // DDR ChA current write address
+    input       [   32-1:0] ddr_b_base_i ,  // DDR ChB buffer base address
+    input       [   32-1:0] ddr_b_end_i  ,  // DDR ChB buffer end address + 1
+    output      [   32-1:0] ddr_b_curr_o ,  // DDR ChB current write address
+    input       [    4-1:0] ddr_control_i   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
 `else
     // System bus
     input               sys_clk_i       ,   // bus clock
@@ -134,7 +134,7 @@ assign  axi_wstrb_o   = 8'b11111111;    // write all bytes
 reg  [ 4-1:0]   buf_ready;      // scope buffer ready registers Al,Ah,Bl,Bh
 wire [ 4-1:0]   buf_finished;   // signals end of buffer processing Al,Ah,Bl,Bh
 `ifdef DDRDUMP_WITH_SYSBUS
-reg  [ 2-1:0]   ddr_enable;     // DDR dump enable flag A/B
+reg  [ 4-1:0]   ddr_control_i;  // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
 `endif
 
 always @(posedge buf_clk_i) begin
@@ -142,7 +142,7 @@ always @(posedge buf_clk_i) begin
         buf_ready <= 4'b0000;
     end else begin
         if (buf_ready_i[0]) begin
-            buf_ready[0] <= ddr_enable[0];
+            buf_ready[0] <= ddr_control_i[0];
         end else if (buf_finished[0]) begin
             buf_ready[0] <= 1'b0;
         end else begin
@@ -150,7 +150,7 @@ always @(posedge buf_clk_i) begin
         end
 
         if (buf_ready_i[1]) begin
-            buf_ready[1] <= ddr_enable[0];
+            buf_ready[1] <= ddr_control_i[0];
         end else if (buf_finished[1]) begin
             buf_ready[1] <= 1'b0;
         end else begin
@@ -158,7 +158,7 @@ always @(posedge buf_clk_i) begin
         end
 
         if (buf_ready_i[2]) begin
-            buf_ready[2] <= ddr_enable[1];
+            buf_ready[2] <= ddr_control_i[1];
         end else if (buf_finished[2]) begin
             buf_ready[2] <= 1'b0;
         end else begin
@@ -166,7 +166,7 @@ always @(posedge buf_clk_i) begin
         end
 
         if (buf_ready_i[3]) begin
-            buf_ready[3] <= ddr_enable[1];
+            buf_ready[3] <= ddr_control_i[1];
         end else if (buf_finished[3]) begin
             buf_ready[3] <= 1'b0;
         end else begin
@@ -183,18 +183,21 @@ reg                 buf_sel_ab;     // stores the currently active channel
 reg  [      12-1:0] buf_rp;         // BRAM read pointer
 reg  [      32-1:0] ddr_wp;         // DDR write pointer
 `ifdef DDRDUMP_WITH_SYSBUS
-reg  [      32-1:0] ddr_a_base;     // DDR ChA buffer base address
-reg  [      32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
-reg  [      32-1:0] ddr_a_curr;     // DDR ChA current write address
-reg  [      32-1:0] ddr_b_base;     // DDR ChB buffer base address
-reg  [      32-1:0] ddr_b_end;      // DDR ChB buffer end address + 1
-reg  [      32-1:0] ddr_b_curr;     // DDR ChB current write address
+reg  [      32-1:0] ddr_a_base_i;   // DDR ChA buffer base address
+reg  [      32-1:0] ddr_a_end_i;    // DDR ChA buffer end address + 1
+reg  [      32-1:0] ddr_b_base_i;   // DDR ChB buffer base address
+reg  [      32-1:0] ddr_b_end_i;    // DDR ChB buffer end address + 1
 `endif
+reg  [      32-1:0] ddr_a_curr;     // DDR ChA current write address
+reg  [      32-1:0] ddr_b_curr;     // DDR ChB current write address
 reg  [8*AXI_CW-1:0] ddr_id_cnt;     // write ID expiry counters ID0-7
 reg                 tx_running;     // flag buffer transmission in progress
 reg                 burst_running;  // flag burst in progress
 reg  [  AXI_IW-1:0] ddr_curr_id;    // current write ID
 reg                 ddr_aw_valid;   // flag next write address valid
+
+assign ddr_a_curr_o = ddr_a_curr;
+assign ddr_b_curr_o = ddr_b_curr;
 
 // internal auxiliary signals
 wire [       8-1:0] ddr_id_busy     = {|ddr_id_cnt[7*AXI_CW+:AXI_CW],|ddr_id_cnt[6*AXI_CW+:AXI_CW],|ddr_id_cnt[5*AXI_CW+:AXI_CW],|ddr_id_cnt[4*AXI_CW+:AXI_CW],
@@ -285,10 +288,10 @@ assign  buf_raddr_o  = buf_rp;
 // AXI address control
 always @(posedge buf_clk_i) begin
     if (!buf_rstn_i) begin
-        ddr_wp        <= 32'h00000000;
-        ddr_a_curr    <= ddr_a_base;
-        ddr_b_curr    <= ddr_b_base;
-        ddr_aw_valid  <= 1'b0;
+        ddr_wp       <= 32'h00000000;
+        ddr_a_curr   <= 32'h00000000;
+        ddr_b_curr   <= 32'h00000000;
+        ddr_aw_valid <= 1'b0;
     end else begin
         if (start_new_tx) begin
             ddr_wp <= (buf_newready[0] | buf_newready[1]) ? ddr_a_curr : ddr_b_curr;
@@ -299,21 +302,25 @@ always @(posedge buf_clk_i) begin
         end
 
         if (start_new_tx & (buf_newready[0] | buf_newready[1])) begin
-            if (ddr_a_next >= ddr_a_end) begin
-                ddr_a_curr <= ddr_a_base;
+            if (ddr_a_next >= ddr_a_end_i) begin
+                ddr_a_curr <= ddr_a_base_i;
             end else begin
                 ddr_a_curr <= ddr_a_next;
             end
+        end else if (ddr_control_i[2]) begin
+            ddr_a_curr <= ddr_a_base_i;
         end else begin
             ddr_a_curr <= ddr_a_curr;
         end
 
         if (start_new_tx & !(buf_newready[0] | buf_newready[1])) begin
-            if (ddr_b_next >= ddr_b_end) begin
-                ddr_b_curr <= ddr_b_base;
+            if (ddr_b_next >= ddr_b_end_i) begin
+                ddr_b_curr <= ddr_b_base_i;
             end else begin
                 ddr_b_curr <= ddr_b_next;
             end
+        end else if (ddr_control_i[3]) begin
+            ddr_b_curr <= ddr_b_base_i;
         end else begin
             ddr_b_curr <= ddr_b_curr;
         end
@@ -431,19 +438,19 @@ reg             ack;
 // reset / write
 always @(posedge buf_clk_i) begin
     if (!buf_rstn_i) begin
-        ddr_a_base <= 32'h00000000;
-        ddr_a_end  <= 32'h00000000;
-        ddr_b_base <= 32'h00000000;
-        ddr_b_end  <= 32'h00000000;
-        ddr_enable <= 2'b00;
+        ddr_a_base_i  <= 32'h00000000;
+        ddr_a_end_i   <= 32'h00000000;
+        ddr_b_base_i  <= 32'h00000000;
+        ddr_b_end_i   <= 32'h00000000;
+        ddr_control_i <= 4'b0000;
     end else begin
         if (wen) begin
-            if (addr[19:0] == 20'h00)   begin   ddr_enable <= wdata[32-2+:2];   end
+            if (addr[19:0] == 20'h00)   begin   ddr_control_i <= wdata[4-1:0];  end
 
-            if (addr[19:0] == 20'h10)   begin   ddr_a_base <= {wdata[32-1:12],12'h000}; end
-            if (addr[19:0] == 20'h14)   begin   ddr_a_end  <= {wdata[32-1:12],12'h000}; end
-            if (addr[19:0] == 20'h18)   begin   ddr_b_base <= {wdata[32-1:12],12'h000}; end
-            if (addr[19:0] == 20'h1c)   begin   ddr_b_end  <= {wdata[32-1:12],12'h000}; end
+            if (addr[19:0] == 20'h10)   begin   ddr_a_base_i <= {wdata[32-1:12],12'h000};   end
+            if (addr[19:0] == 20'h14)   begin   ddr_a_end_i  <= {wdata[32-1:12],12'h000};   end
+            if (addr[19:0] == 20'h18)   begin   ddr_b_base_i <= {wdata[32-1:12],12'h000};   end
+            if (addr[19:0] == 20'h1c)   begin   ddr_b_end_i  <= {wdata[32-1:12],12'h000};   end
         end
     end
 end
@@ -454,21 +461,21 @@ end
 always @(*) begin
     err <= 1'b0;
 
-    if (addr[19:0] == 20'h00)   begin   ack <= 1'b1;    rdata <= {ddr_enable,30'h0};    end
+    if (addr[19:0] == 20'h00)   begin   ack <= 1'b1;    rdata <= {28'h0,ddr_control_i}; end
 
     if (addr[19:0] == 20'h08)   begin   ack <= 1'b1;    rdata <= ddr_a_curr;    end
     if (addr[19:0] == 20'h0c)   begin   ack <= 1'b1;    rdata <= ddr_b_curr;    end
 
-    if (addr[19:0] == 20'h10)   begin   ack <= 1'b1;    rdata <= ddr_a_base;    end
-    if (addr[19:0] == 20'h14)   begin   ack <= 1'b1;    rdata <= ddr_a_end;     end
-    if (addr[19:0] == 20'h18)   begin   ack <= 1'b1;    rdata <= ddr_b_base;    end
-    if (addr[19:0] == 20'h1c)   begin   ack <= 1'b1;    rdata <= ddr_b_end;     end
+    if (addr[19:0] == 20'h10)   begin   ack <= 1'b1;    rdata <= ddr_a_base_i;  end
+    if (addr[19:0] == 20'h14)   begin   ack <= 1'b1;    rdata <= ddr_a_end_i;   end
+    if (addr[19:0] == 20'h18)   begin   ack <= 1'b1;    rdata <= ddr_b_base_i;  end
+    if (addr[19:0] == 20'h1c)   begin   ack <= 1'b1;    rdata <= ddr_b_end_i;   end
 end
 
 
 // --------------------------------------------------------------------------------------------------
 // bridge between Dumper and sys clock
-bus_clk_bridge i_bridge
+bus_clk_bridge i_bridge_hp0
 (
     .sys_clk_i      (sys_clk_i      ),
     .sys_rstn_i     (sys_rstn_i     ),

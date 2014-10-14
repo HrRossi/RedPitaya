@@ -69,36 +69,36 @@ module red_pitaya_hk
 //
 //  Simple LED logic
 
-reg [32-1: 0] shift_led_cnt ;
-reg [ 8-1: 0] shift_led_reg ;
-reg           shift_led_dir ;
-
-always @(posedge clk_i) begin
-   if (rstn_i == 1'b0) begin
-      shift_led_cnt <= 32'h0 ;
-      shift_led_reg <=  8'h1 ;
-      shift_led_dir <=  1'b1 ; // 1-left, 0-right
-   end
-   else begin
-      if (shift_led_cnt == 32'd40000000)
-         shift_led_cnt <= 32'h1;
-      else
-         shift_led_cnt <= shift_led_cnt + 32'h1;
-
-      if (shift_led_cnt == 32'h1) begin
-         if (shift_led_dir)
-            shift_led_reg <= {shift_led_reg[6:0], 1'b0} ; //shift left
-         else
-            shift_led_reg <= {1'b0, shift_led_reg[7:1]} ; //shift right
-
-          // change direction
-         if (shift_led_dir && (shift_led_reg==8'h40))
-            shift_led_dir <= !shift_led_dir ;
-         else if (!shift_led_dir && (shift_led_reg==8'h2))
-            shift_led_dir <= !shift_led_dir ;
-      end
-   end
-end
+//reg [32-1: 0] shift_led_cnt ;
+//reg [ 8-1: 0] shift_led_reg ;
+//reg           shift_led_dir ;
+//
+//always @(posedge clk_i) begin
+//   if (rstn_i == 1'b0) begin
+//      shift_led_cnt <= 32'h0 ;
+//      shift_led_reg <=  8'h1 ;
+//      shift_led_dir <=  1'b1 ; // 1-left, 0-right
+//   end
+//   else begin
+//      if (shift_led_cnt == 32'd40000000)
+//         shift_led_cnt <= 32'h1;
+//      else
+//         shift_led_cnt <= shift_led_cnt + 32'h1;
+//
+//      if (shift_led_cnt == 32'h1) begin
+//         if (shift_led_dir)
+//            shift_led_reg <= {shift_led_reg[6:0], 1'b0} ; //shift left
+//         else
+//            shift_led_reg <= {1'b0, shift_led_reg[7:1]} ; //shift right
+//
+//          // change direction
+//         if (shift_led_dir && (shift_led_reg==8'h40))
+//            shift_led_dir <= !shift_led_dir ;
+//         else if (!shift_led_dir && (shift_led_reg==8'h2))
+//            shift_led_dir <= !shift_led_dir ;
+//      end
+//   end
+//end
     
 
 
@@ -111,26 +111,27 @@ end
 //
 //  Testing logic
 
-// LED blinking
-reg  [  8-1: 0] led_reg ;      
-reg  [ 32-1: 0] led_cnt ;      
-
-always @(posedge clk_i) begin
-   if (rstn_i == 1'b0) begin
-      led_reg[0] <=  1'b0 ;
-      led_cnt    <= 32'h0 ;
-   end
-   else begin
-      led_reg[0] <= led_cnt[26] ;
-      led_cnt    <= led_cnt + 32'h1 ;
-   end
-end
-
-
-assign led_o = led_reg ; //shift_led_reg;
+//// LED blinking
+//reg  [  8-1: 0] led_reg ;      
+//reg  [ 32-1: 0] led_cnt ;      
+//
+//always @(posedge clk_i) begin
+//   if (rstn_i == 1'b0) begin
+//      led_reg[0] <=  1'b0 ;
+//      led_cnt    <= 32'h0 ;
+//   end
+//   else begin
+//      led_reg[0] <= led_cnt[26] ;
+//      led_cnt    <= led_cnt + 32'h1 ;
+//   end
+//end
 
 
+//assign led_o = led_reg ; //shift_led_reg;
 
+reg [8-1:0] led_reg;
+
+assign led_o = led_reg;
 
 
 
@@ -208,7 +209,8 @@ assign id_value[ 3: 0] =  4'h1 ; // board type   1-release1
 
 always @(posedge sys_clk_i) begin
    if (sys_rstn_i == 1'b0) begin
-      led_reg[7:1] <= 7'h0 ;
+//      led_reg[7:1] <= 7'h0 ;
+      led_reg[7:0] <= 8'h0 ;
       exp_p_dat_o  <= 8'h0 ;
       exp_p_dir_o  <= 8'h0 ;
       exp_n_dat_o  <= 8'h0 ;
@@ -221,7 +223,7 @@ always @(posedge sys_clk_i) begin
          if (sys_addr_i[19:0]==20'h18)   exp_p_dat_o  <= sys_wdata_i[8-1:0] ;
          if (sys_addr_i[19:0]==20'h1C)   exp_n_dat_o  <= sys_wdata_i[8-1:0] ;
 
-         if (sys_addr_i[19:0]==20'h30)   led_reg[7:1] <= sys_wdata_i[8-1:1] ;
+         if (sys_addr_i[19:0]==20'h30)   led_reg[7:0] <= sys_wdata_i[8-1:0] ;
       end
    end
 end
@@ -245,7 +247,7 @@ always @(*) begin
      20'h00020 : begin sys_ack_o <= 1'b1;          sys_rdata_o <= {{32- 8{1'b0}}, exp_p_dat_i }                        ; end
      20'h00024 : begin sys_ack_o <= 1'b1;          sys_rdata_o <= {{32- 8{1'b0}}, exp_n_dat_i }                        ; end
 
-     20'h00030 : begin sys_ack_o <= 1'b1;          sys_rdata_o <= {{32- 8{1'b0}}, led_reg[7:1], 1'b0 }                 ; end
+     20'h00030 : begin sys_ack_o <= 1'b1;          sys_rdata_o <= {{32- 8{1'b0}}, led_reg[7:0]}                        ; end
 
        default : begin sys_ack_o <= 1'b1;          sys_rdata_o <=  32'h0                                               ; end
    endcase

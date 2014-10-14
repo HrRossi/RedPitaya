@@ -75,20 +75,19 @@ module red_pitaya_scope
 
 `ifndef DDRDUMP_WITH_SYSBUS
     // DDR Dump parameter export
-    output reg  [   32-1:0] ddr_a_base  ,   // DDR ChA buffer base address
-    output reg  [   32-1:0] ddr_a_end   ,   // DDR ChA buffer end address + 1
-    input       [   32-1:0] ddr_a_curr  ,   // DDR ChA current write address
-    output reg  [   32-1:0] ddr_b_base  ,   // DDR ChB buffer base address
-    output reg  [   32-1:0] ddr_b_end   ,   // DDR ChB buffer end address + 1
-    input       [   32-1:0] ddr_b_curr  ,   // DDR ChB current write address
-    output reg  [    2-1:0] ddr_enable  ,   // DDR dump enable flag A/B
+    output      [   32-1:0] ddr_a_base_o    ,   // DDR ChA buffer base address
+    output      [   32-1:0] ddr_a_end_o     ,   // DDR ChA buffer end address + 1
+    input       [   32-1:0] ddr_a_curr_i    ,   // DDR ChA current write address
+    output      [   32-1:0] ddr_b_base_o    ,   // DDR ChB buffer base address
+    output      [   32-1:0] ddr_b_end_o     ,   // DDR ChB buffer end address + 1
+    input       [   32-1:0] ddr_b_curr_i    ,   // DDR ChB current write address
+    output      [    4-1:0] ddr_control_o   ,   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
 `endif
     // Remote ADC buffer readout
     input           adcbuf_clk_i        ,   // clock
     input           adcbuf_rstn_i       ,   // reset
     input  [ 2-1:0] adcbuf_select_i     ,   //
     output [ 4-1:0] adcbuf_ready_o      ,   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
-    //input  [ 4-1:0] adcbuf_ack_i        ,   // buffer ready acknowledge [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
     input  [12-1:0] adcbuf_raddr_i      ,   //
     output [64-1:0] adcbuf_rdata_o          //
 );
@@ -196,14 +195,14 @@ always @(posedge adc_clk_i) begin
       adc_dv <= (adc_dec_cnt >= set_dec) ;
 
       case (set_dec & {17{set_avg_en}})
-         17'h0     : begin adc_a_dat <= {adc_a_filt_out      ,2'b0};    adc_b_dat <= {adc_b_filt_out      ,2'b0};   end
-         17'h1     : begin adc_a_dat <= {adc_a_sum[14+0 :  0],1'b0};    adc_b_dat <= {adc_b_sum[14+0 :  0],1'b0};   end
-         17'h8     : begin adc_a_dat <=  adc_a_sum[15+3 :  3];          adc_b_dat <=  adc_b_sum[15+3 :  3];         end
-         17'h40    : begin adc_a_dat <=  adc_a_sum[15+6 :  6];          adc_b_dat <=  adc_b_sum[15+6 :  6];         end
-         17'h400   : begin adc_a_dat <=  adc_a_sum[15+10: 10];          adc_b_dat <=  adc_b_sum[15+10: 10];         end
-         17'h2000  : begin adc_a_dat <=  adc_a_sum[15+13: 13];          adc_b_dat <=  adc_b_sum[15+13: 13];         end
-         17'h10000 : begin adc_a_dat <=  adc_a_sum[15+16: 16];          adc_b_dat <=  adc_b_sum[15+16: 16];         end
-         default   : begin adc_a_dat <= {adc_a_sum[14+0 :  0],1'b0};    adc_b_dat <= {adc_b_sum[14+0 :  0],1'b0};   end
+         17'h0     : begin adc_a_dat <= adc_a_filt_out;            adc_b_dat <= adc_b_filt_out;        end
+         17'h1     : begin adc_a_dat <= adc_a_sum[15+0 :  0];      adc_b_dat <= adc_b_sum[15+0 :  0];  end
+         17'h8     : begin adc_a_dat <= adc_a_sum[15+3 :  3];      adc_b_dat <= adc_b_sum[15+3 :  3];  end
+         17'h40    : begin adc_a_dat <= adc_a_sum[15+6 :  6];      adc_b_dat <= adc_b_sum[15+6 :  6];  end
+         17'h400   : begin adc_a_dat <= adc_a_sum[15+10: 10];      adc_b_dat <= adc_b_sum[15+10: 10];  end
+         17'h2000  : begin adc_a_dat <= adc_a_sum[15+13: 13];      adc_b_dat <= adc_b_sum[15+13: 13];  end
+         17'h10000 : begin adc_a_dat <= adc_a_sum[15+16: 16];      adc_b_dat <= adc_b_sum[15+16: 16];  end
+         default   : begin adc_a_dat <= adc_a_sum[15+0 :  0];      adc_b_dat <= adc_b_sum[15+0 :  0];  end
       endcase
 
    end
@@ -260,7 +259,7 @@ adc_buffer adc_b_buffer (
 assign adcbuf_rdata_o = {64{(adcbuf_select_i == 2'b01)}} & buf_a_data_o |
                         {64{(adcbuf_select_i == 2'b10)}} & buf_b_data_o;
 
-reg     [2:0]   addr_sync;
+(* ASYNC_REG="true" *)  reg     [2:0]   addr_sync;
 
 always @(posedge adcbuf_clk_i) begin
     if (!adcbuf_rstn_i) begin
@@ -537,6 +536,19 @@ assign asg_trig_n = (asg_trig_dn == 2'b10) ;
 //
 //  System bus connection
 
+`ifndef DDRDUMP_WITH_SYSBUS
+reg  [  32-1:0] ddr_a_base;     // DDR ChA buffer base address
+reg  [  32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
+reg  [  32-1:0] ddr_b_base;     // DDR ChB buffer base address
+reg  [  32-1:0] ddr_b_end;      // DDR ChB buffer end address + 1
+reg  [   4-1:0] ddr_control;    // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+
+assign ddr_a_base_o  = ddr_a_base;
+assign ddr_a_end_o   = ddr_a_end;
+assign ddr_b_base_o  = ddr_b_base;
+assign ddr_b_end_o   = ddr_b_end;
+assign ddr_control_o = ddr_control;
+`endif
 
 always @(posedge adc_clk_i) begin
    if (adc_rstn_i == 1'b0) begin
@@ -556,11 +568,11 @@ always @(posedge adc_clk_i) begin
       set_b_filt_kk <=  25'hFFFFFF ;
       set_b_filt_pp <=  25'h0      ;
 `ifndef DDRDUMP_WITH_SYSBUS
-        ddr_a_base <= 32'h00000000;
-        ddr_a_end  <= 32'h00000000;
-        ddr_b_base <= 32'h00000000;
-        ddr_b_end  <= 32'h00000000;
-        ddr_enable <= 2'b00;
+        ddr_a_base  <= 32'h00000000;
+        ddr_a_end   <= 32'h00000000;
+        ddr_b_base  <= 32'h00000000;
+        ddr_b_end   <= 32'h00000000;
+        ddr_control <= 4'b0000;
 `endif
    end
    else begin
@@ -583,11 +595,11 @@ always @(posedge adc_clk_i) begin
          if (addr[19:0]==20'h4C)   set_b_filt_pp <= wdata[25-1:0] ;
 
 `ifndef DDRDUMP_WITH_SYSBUS
-            if (addr[19:0]==20'h60) ddr_a_base <= wdata;
-            if (addr[19:0]==20'h64) ddr_a_end  <= wdata;
-            if (addr[19:0]==20'h68) ddr_b_base <= wdata;
-            if (addr[19:0]==20'h6c) ddr_b_end  <= wdata;
-            if (addr[19:0]==20'h70) ddr_enable <= wdata[2-1:0];
+            if (addr[19:0]==20'h60) ddr_a_base  <= wdata;
+            if (addr[19:0]==20'h64) ddr_a_end   <= wdata;
+            if (addr[19:0]==20'h68) ddr_b_base  <= wdata;
+            if (addr[19:0]==20'h6c) ddr_b_end   <= wdata;
+            if (addr[19:0]==20'h70) ddr_control <= wdata[4-1:0];
 `endif
       end
    end
@@ -626,8 +638,12 @@ always @(*) begin
      20'h0004C : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_pp}      ; end
 
 `ifndef DDRDUMP_WITH_SYSBUS
-    20'h00074:  begin   ack <= 1'b1;    rdata <= ddr_a_curr;    end
-    20'h00078:  begin   ack <= 1'b1;    rdata <= ddr_b_curr;    end
+    20'h00060 : begin   ack <= 1'b1;    rdata <= ddr_a_base;    end
+    20'h00064 : begin   ack <= 1'b1;    rdata <= ddr_a_end;     end
+    20'h00068 : begin   ack <= 1'b1;    rdata <= ddr_b_base;    end
+    20'h0006c : begin   ack <= 1'b1;    rdata <= ddr_b_end;     end
+    20'h00074 : begin   ack <= 1'b1;    rdata <= ddr_a_curr_i;  end
+    20'h00078 : begin   ack <= 1'b1;    rdata <= ddr_b_curr_i;  end
 `endif
 
        default : begin ack <= 1'b1;          rdata <=  32'h0                              ; end
@@ -639,7 +655,7 @@ end
 
 
 // bridge between ADC and sys clock
-bus_clk_bridge i_bridge
+bus_clk_bridge i_bridge_scope
 (
    .sys_clk_i     (  sys_clk_i      ),
    .sys_rstn_i    (  sys_rstn_i     ),

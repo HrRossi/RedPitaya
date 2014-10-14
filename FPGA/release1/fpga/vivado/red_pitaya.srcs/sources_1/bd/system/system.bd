@@ -69,7 +69,7 @@
           </spirit:parameter>
           <spirit:parameter>
             <spirit:name>ID_WIDTH</spirit:name>
-            <spirit:value>0</spirit:value>
+            <spirit:value>6</spirit:value>
           </spirit:parameter>
           <spirit:parameter>
             <spirit:name>ADDR_WIDTH</spirit:name>
@@ -172,6 +172,10 @@
         </spirit:portMaps>
         <spirit:parameters>
           <spirit:parameter>
+            <spirit:name>FREQ_HZ</spirit:name>
+            <spirit:value>250000000</spirit:value>
+          </spirit:parameter>
+          <spirit:parameter>
             <spirit:name>ASSOCIATED_RESET</spirit:name>
             <spirit:value>FCLK_RESET1_N</spirit:value>
           </spirit:parameter>
@@ -195,6 +199,10 @@
           </spirit:portMap>
         </spirit:portMaps>
         <spirit:parameters>
+          <spirit:parameter>
+            <spirit:name>FREQ_HZ</spirit:name>
+            <spirit:value>50000000</spirit:value>
+          </spirit:parameter>
           <spirit:parameter>
             <spirit:name>ASSOCIATED_RESET</spirit:name>
             <spirit:value>FCLK_RESET2_N</spirit:value>
@@ -295,6 +303,10 @@
           </spirit:portMap>
         </spirit:portMaps>
         <spirit:parameters>
+          <spirit:parameter>
+            <spirit:name>FREQ_HZ</spirit:name>
+            <spirit:value>200000000</spirit:value>
+          </spirit:parameter>
           <spirit:parameter>
             <spirit:name>ASSOCIATED_RESET</spirit:name>
             <spirit:value>FCLK_RESET3_N</spirit:value>

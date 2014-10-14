@@ -369,7 +369,7 @@ end
 
 
 // bridge between processing and sys clock
-bus_clk_bridge i_bridge
+bus_clk_bridge i_bridge_pid
 (
    .sys_clk_i     (  sys_clk_i      ),
    .sys_rstn_i    (  sys_rstn_i     ),

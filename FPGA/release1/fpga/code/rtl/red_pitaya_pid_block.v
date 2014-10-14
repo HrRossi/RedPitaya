@@ -119,7 +119,6 @@ assign kp_mult = $signed(error) * $signed(set_kp_i);
 
 reg   [    29-1: 0] ki_mult       ;
 wire  [    33-1: 0] int_sum       ;
-//(* use_dsp48="yes" *)
 reg   [    32-1: 0] int_reg       ;
 wire  [32-ISR-1: 0] int_shr       ;
 
