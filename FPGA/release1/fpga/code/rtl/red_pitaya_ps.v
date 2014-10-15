@@ -11,7 +11,10 @@
  * Please visit http://en.wikipedia.org/wiki/Verilog
  * for more details on the language used herein.
  */
-
+/*
+ * 2014-10-15 Nils Roos <doctor@smart.ms>
+ * Added infrastructure for ADC data transfer to DDR2 RAM through AXI HP bus
+ */
 
 
 /**
@@ -24,13 +27,16 @@
  *                   /-------\
  *   PS CLK -------> |       | <---------------------> SPI master & slave
  *   PS RST -------> |  PS   |
- *                   |       | ------------+---------> FCLK & reset 
- *                   |       |             |
- *   PS DDR <------> |  ARM  |   AXI   /-------\
- *   PS MIO <------> |       | <-----> |  AXI  | <---> system bus
- *                   \-------/         | SLAVE |
- *                                     \-------/
- *
+ *                   |       | ------------+-------+-> FCLK & reset 
+ *                   |       |             |       |
+ *   PS MIO <------> |  ARM  |   AXI   /-------\   |
+ *   PS DDR <------> |       | <-----> |  AXI  | <---> system bus
+ *      ^            \-------/         | SLAVE |   |
+ *      |                              \-------/   |
+ *  /------\   AXI   /---------\                   |
+ *  | DDRC | <-----> | AXI2DDR | <-----------------+-> ADC
+ *  \------/         | MASTER  |
+ *                   \---------/
  *
  *
  * Module wrappes PS module (BD design from Vivado or EDK from PlanAhead).
@@ -102,7 +108,6 @@ module red_pitaya_ps
     output [12-1:0] adcbuf_raddr_o  ,
     input  [64-1:0] adcbuf_rdata_i  ,
 
-`ifndef DDRDUMP_WITH_SYSBUS
     // parameter export
     input   [   32-1:0] ddr_a_base_i,   // DDR ChA buffer base address
     input   [   32-1:0] ddr_a_end_i ,   // DDR ChA buffer end address + 1
@@ -111,19 +116,6 @@ module red_pitaya_ps
     input   [   32-1:0] ddr_b_end_i ,   // DDR ChB buffer end address + 1
     output  [   32-1:0] ddr_b_curr_o,   // DDR ChB current write address
     input   [    4-1:0] ddr_control_i   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
-`else
-    // System bus
-    input           sysbus_clk_i    ,   //!< bus clock
-    input           sysbus_rstn_i   ,   //!< bus reset - active low
-    input  [32-1:0] sysbus_addr_i   ,   //!< bus saddress
-    input  [32-1:0] sysbus_wdata_i  ,   //!< bus write data
-    input   [4-1:0] sysbus_sel_i    ,   //!< bus write byte select
-    input           sysbus_wen_i    ,   //!< bus write enable
-    input           sysbus_ren_i    ,   //!< bus read enable
-    output [32-1:0] sysbus_rdata_o  ,   //!< bus read data
-    output          sysbus_err_o    ,   //!< bus error indicator
-    output          sysbus_ack_o        //!< bus acknowledge signal
-`endif
 );
 
 
@@ -496,7 +488,6 @@ axi_dump2ddr_master #(
     .buf_raddr_o    (adcbuf_raddr_o     ),  //
     .buf_rdata_i    (adcbuf_rdata_i     ),  //
 
-`ifndef DDRDUMP_WITH_SYSBUS
     // parameter export
     .ddr_a_base_i   (ddr_a_base_i       ),
     .ddr_a_end_i    (ddr_a_end_i        ),
@@ -505,19 +496,6 @@ axi_dump2ddr_master #(
     .ddr_b_end_i    (ddr_b_end_i        ),
     .ddr_b_curr_o   (ddr_b_curr_o       ),
     .ddr_control_i  (ddr_control_i      )
-`else
-    // System bus
-    .sys_clk_i      (sysbus_clk_i       ),  // bus clock
-    .sys_rstn_i     (sysbus_rstn_i      ),  // bus reset - active low
-    .sys_addr_i     (sysbus_addr_i      ),  // bus saddress
-    .sys_wdata_i    (sysbus_wdata_i     ),  // bus write data
-    .sys_sel_i      (sysbus_sel_i       ),  // bus write byte select
-    .sys_wen_i      (sysbus_wen_i       ),  // bus write enable
-    .sys_ren_i      (sysbus_ren_i       ),  // bus read enable
-    .sys_rdata_o    (sysbus_rdata_o     ),  // bus read data
-    .sys_err_o      (sysbus_err_o       ),  // bus error indicator
-    .sys_ack_o      (sysbus_ack_o       )   // bus acknowledge signal
-`endif
 );
 
 

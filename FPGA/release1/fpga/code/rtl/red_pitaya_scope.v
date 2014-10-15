@@ -12,7 +12,12 @@
  * Please visit http://en.wikipedia.org/wiki/Verilog
  * for more details on the language used herein.
  */
-
+/*
+ * 2014-10-15 Nils Roos <doctor@smart.ms>
+ * Replaced connection of BRAM to (slow) sys_bus with high performance AXI
+ * connection to DDR controller. Added control registers for the DDR buffer
+ * operation and location. 
+ */
 
 
 /**
@@ -22,17 +27,17 @@
  * application. It consists from three main parts.
  *
  *
- *                /--------\      /-----------\            /-----\
- *   ADC CHA ---> | DFILT1 | ---> | AVG & DEC | ---------> | BUF | --->  SW
- *                \--------/      \-----------/     |      \-----/
- *                                                  ˇ         ^
- *                                              /------\      |
- *   ext trigger -----------------------------> | TRIG | -----+
- *                                              \------/      |
- *                                                  ^         ˇ
- *                /--------\      /-----------\     |      /-----\
- *   ADC CHB ---> | DFILT1 | ---> | AVG & DEC | ---------> | BUF | --->  SW
- *                \--------/      \-----------/            \-----/ 
+ *                /--------\      /-----------\            /-----\      /---
+ *   ADC CHA ---> | DFILT1 | ---> | AVG & DEC | ----+----> | BUF | ---> |   
+ *                \--------/      \-----------/     |      \-----/      | A 
+ *                                                  ˇ         ^         | X 
+ *                                              /------\      |         | I 
+ *   ext trigger -----------------------------> | TRIG | -----+         | 2 
+ *                                              \------/      |         | D 
+ *                                                  ^         ˇ         | D 
+ *                /--------\      /-----------\     |      /-----\      | R 
+ *   ADC CHB ---> | DFILT1 | ---> | AVG & DEC | ----+----> | BUF | ---> |   
+ *                \--------/      \-----------/            \-----/      \---
  *
  *
  * Input data is optionaly averaged and decimated via average filter.
@@ -73,7 +78,6 @@ module red_pitaya_scope
    output                sys_err_o       ,  //!< bus error indicator
    output                sys_ack_o       ,  //!< bus acknowledge signal
 
-`ifndef DDRDUMP_WITH_SYSBUS
     // DDR Dump parameter export
     output      [   32-1:0] ddr_a_base_o    ,   // DDR ChA buffer base address
     output      [   32-1:0] ddr_a_end_o     ,   // DDR ChA buffer end address + 1
@@ -82,7 +86,7 @@ module red_pitaya_scope
     output      [   32-1:0] ddr_b_end_o     ,   // DDR ChB buffer end address + 1
     input       [   32-1:0] ddr_b_curr_i    ,   // DDR ChB current write address
     output      [    4-1:0] ddr_control_o   ,   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
-`endif
+
     // Remote ADC buffer readout
     input           adcbuf_clk_i        ,   // clock
     input           adcbuf_rstn_i       ,   // reset
@@ -91,6 +95,12 @@ module red_pitaya_scope
     input  [12-1:0] adcbuf_raddr_i      ,   //
     output [64-1:0] adcbuf_rdata_o          //
 );
+
+/* ID values to be read by the device driver, mapped at 40100ff0 - 40100fff */
+localparam SYS_ADC_ID = 32'h00000001;
+localparam SYS_ADC_1 = 32'h00000000;
+localparam SYS_ADC_2 = 32'h00000000;
+localparam SYS_ADC_3 = 32'h00000000;
 
 
 wire [ 32-1: 0] addr         ;
@@ -536,7 +546,6 @@ assign asg_trig_n = (asg_trig_dn == 2'b10) ;
 //
 //  System bus connection
 
-`ifndef DDRDUMP_WITH_SYSBUS
 reg  [  32-1:0] ddr_a_base;     // DDR ChA buffer base address
 reg  [  32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
 reg  [  32-1:0] ddr_b_base;     // DDR ChB buffer base address
@@ -548,7 +557,6 @@ assign ddr_a_end_o   = ddr_a_end;
 assign ddr_b_base_o  = ddr_b_base;
 assign ddr_b_end_o   = ddr_b_end;
 assign ddr_control_o = ddr_control;
-`endif
 
 always @(posedge adc_clk_i) begin
    if (adc_rstn_i == 1'b0) begin
@@ -567,13 +575,11 @@ always @(posedge adc_clk_i) begin
       set_b_filt_bb <=  25'h0      ;
       set_b_filt_kk <=  25'hFFFFFF ;
       set_b_filt_pp <=  25'h0      ;
-`ifndef DDRDUMP_WITH_SYSBUS
         ddr_a_base  <= 32'h00000000;
         ddr_a_end   <= 32'h00000000;
         ddr_b_base  <= 32'h00000000;
         ddr_b_end   <= 32'h00000000;
         ddr_control <= 4'b0000;
-`endif
    end
    else begin
       if (wen) begin
@@ -594,13 +600,11 @@ always @(posedge adc_clk_i) begin
          if (addr[19:0]==20'h48)   set_b_filt_kk <= wdata[25-1:0] ;
          if (addr[19:0]==20'h4C)   set_b_filt_pp <= wdata[25-1:0] ;
 
-`ifndef DDRDUMP_WITH_SYSBUS
             if (addr[19:0]==20'h60) ddr_a_base  <= wdata;
             if (addr[19:0]==20'h64) ddr_a_end   <= wdata;
             if (addr[19:0]==20'h68) ddr_b_base  <= wdata;
             if (addr[19:0]==20'h6c) ddr_b_end   <= wdata;
             if (addr[19:0]==20'h70) ddr_control <= wdata[4-1:0];
-`endif
       end
    end
 end
@@ -637,15 +641,17 @@ always @(*) begin
      20'h00048 : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_kk}      ; end
      20'h0004C : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_pp}      ; end
 
-`ifndef DDRDUMP_WITH_SYSBUS
-    20'h00060 : begin   ack <= 1'b1;    rdata <= ddr_a_base;    end
-    20'h00064 : begin   ack <= 1'b1;    rdata <= ddr_a_end;     end
-    20'h00068 : begin   ack <= 1'b1;    rdata <= ddr_b_base;    end
-    20'h0006c : begin   ack <= 1'b1;    rdata <= ddr_b_end;     end
-    20'h00074 : begin   ack <= 1'b1;    rdata <= ddr_a_curr_i;  end
-    20'h00078 : begin   ack <= 1'b1;    rdata <= ddr_b_curr_i;  end
-`endif
+    20'h00060:  begin   ack <= 1'b1;    rdata <= ddr_a_base;    end
+    20'h00064:  begin   ack <= 1'b1;    rdata <= ddr_a_end;     end
+    20'h00068:  begin   ack <= 1'b1;    rdata <= ddr_b_base;    end
+    20'h0006c:  begin   ack <= 1'b1;    rdata <= ddr_b_end;     end
+    20'h00074:  begin   ack <= 1'b1;    rdata <= ddr_a_curr_i;  end
+    20'h00078:  begin   ack <= 1'b1;    rdata <= ddr_b_curr_i;  end
 
+    20'h00ff0:  begin   ack <= 1'b1;    rdata <= SYS_ADC_ID;    end
+    20'h00ff4:  begin   ack <= 1'b1;    rdata <= SYS_ADC_1;     end
+    20'h00ff8:  begin   ack <= 1'b1;    rdata <= SYS_ADC_2;     end
+    20'h00ffc:  begin   ack <= 1'b1;    rdata <= SYS_ADC_3;     end
        default : begin ack <= 1'b1;          rdata <=  32'h0                              ; end
    endcase
 end

@@ -1,20 +1,24 @@
 //////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
+// Engineer: Nils Roos <doctor@smart.ms>
 // 
 // Create Date: 16.07.2014 22:57:49
-// Design Name: 
-// Module Name: axi_master
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
+// Module Name: axi_dump2ddr_master
 // Description: 
-// 
-// Dependencies: 
+// AXI HP master that transfers data from two BRAM buffers A/B (not  part of the
+// module) to two DDR RAM based ringbuffers via the memory interconnect. Transfers
+// are organized in half-buffer blocks and interleaved A1 B1 A2 B2. Transfers are
+// queued as soon as each half-buffer signals readiness.
+// The AXI master uses maximum sized bursts and can employ the full outstanding
+// write capabilities of the memory interconnect. 
 // 
 // Revision:
 // Revision 0.01 - File Created
-// Additional Comments:
+// Additional Comments: designed for use with the RedPitaya hardware
+// 
+// Kown issues:
+// - the first four samples on each channel are corrupted when enabling the DDR
+//   dump functionality; not likely to get fixed because this made it easier to
+//   not loose samples during buffer wrap-arounds
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
@@ -27,6 +31,7 @@ module axi_dump2ddr_master #(
     parameter   BUF_AW  =  12           , // buffer address width
     parameter   BUF_CH  =   2             // number of buffered channels
 )(
+    // AXI HP master interface
     output [AXI_AW-1:0] axi_araddr_o    ,
     output [       1:0] axi_arburst_o   ,
     output [       3:0] axi_arcache_o   ,
@@ -66,6 +71,7 @@ module axi_dump2ddr_master #(
     output [AXI_SW-1:0] axi_wstrb_o     ,
     output              axi_wvalid_o    ,
 
+    // ADC connection
     input                   buf_clk_i   ,
     input                   buf_rstn_i  ,
     output [    BUF_CH-1:0] buf_select_o,
@@ -73,7 +79,6 @@ module axi_dump2ddr_master #(
     output [    BUF_AW-1:0] buf_raddr_o ,
     input  [    AXI_DW-1:0] buf_rdata_i ,
 
-`ifndef DDRDUMP_WITH_SYSBUS
     // parameter export
     input       [   32-1:0] ddr_a_base_i ,  // DDR ChA buffer base address
     input       [   32-1:0] ddr_a_end_i  ,  // DDR ChA buffer end address + 1
@@ -82,23 +87,10 @@ module axi_dump2ddr_master #(
     input       [   32-1:0] ddr_b_end_i  ,  // DDR ChB buffer end address + 1
     output      [   32-1:0] ddr_b_curr_o ,  // DDR ChB current write address
     input       [    4-1:0] ddr_control_i   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
-`else
-    // System bus
-    input               sys_clk_i       ,   // bus clock
-    input               sys_rstn_i      ,   // bus reset - active low
-    input    [ 32-1: 0] sys_addr_i      ,   // bus saddress
-    input    [ 32-1: 0] sys_wdata_i     ,   // bus write data
-    input    [  4-1: 0] sys_sel_i       ,   // bus write byte select
-    input               sys_wen_i       ,   // bus write enable
-    input               sys_ren_i       ,   // bus read enable
-    output   [ 32-1: 0] sys_rdata_o     ,   // bus read data
-    output              sys_err_o       ,   // bus error indicator
-    output              sys_ack_o           // bus acknowledge signal
-`endif
 );
 
-localparam AXI_CW = 4;      // width of the ID expiry counters
-localparam AXI_CI = 4'hf;   // initial countdown value for the ID expiry counters
+localparam AXI_CW = 6;       // width of the ID expiry counters
+localparam AXI_CI = 6'h3f;   // initial countdown value for the ID expiry counters
 genvar CNT;
 
 
@@ -133,9 +125,6 @@ assign  axi_wstrb_o   = 8'b11111111;    // write all bytes
 // process ready latches from scope
 reg  [ 4-1:0]   buf_ready;      // scope buffer ready registers Al,Ah,Bl,Bh
 wire [ 4-1:0]   buf_finished;   // signals end of buffer processing Al,Ah,Bl,Bh
-`ifdef DDRDUMP_WITH_SYSBUS
-reg  [ 4-1:0]   ddr_control_i;  // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
-`endif
 
 always @(posedge buf_clk_i) begin
     if (!buf_rstn_i) begin
@@ -182,12 +171,6 @@ reg  [       2-1:0] buf_sel;        // select signals for Cha / ChB
 reg                 buf_sel_ab;     // stores the currently active channel
 reg  [      12-1:0] buf_rp;         // BRAM read pointer
 reg  [      32-1:0] ddr_wp;         // DDR write pointer
-`ifdef DDRDUMP_WITH_SYSBUS
-reg  [      32-1:0] ddr_a_base_i;   // DDR ChA buffer base address
-reg  [      32-1:0] ddr_a_end_i;    // DDR ChA buffer end address + 1
-reg  [      32-1:0] ddr_b_base_i;   // DDR ChB buffer base address
-reg  [      32-1:0] ddr_b_end_i;    // DDR ChB buffer end address + 1
-`endif
 reg  [      32-1:0] ddr_a_curr;     // DDR ChA current write address
 reg  [      32-1:0] ddr_b_curr;     // DDR ChB current write address
 reg  [8*AXI_CW-1:0] ddr_id_cnt;     // write ID expiry counters ID0-7
@@ -420,85 +403,6 @@ always @(posedge buf_clk_i) begin
 end
 
 end end endgenerate
-
-
-`ifdef DDRDUMP_WITH_SYSBUS
-// --------------------------------------------------------------------------------------------------
-// system bus connection
-wire [32-1:0]   addr;
-wire [32-1:0]   wdata;
-wire            wen;
-wire            ren;
-reg  [32-1:0]   rdata;
-reg             err;
-reg             ack;
-
-
-// --------------------------------------------------------------------------------------------------
-// reset / write
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        ddr_a_base_i  <= 32'h00000000;
-        ddr_a_end_i   <= 32'h00000000;
-        ddr_b_base_i  <= 32'h00000000;
-        ddr_b_end_i   <= 32'h00000000;
-        ddr_control_i <= 4'b0000;
-    end else begin
-        if (wen) begin
-            if (addr[19:0] == 20'h00)   begin   ddr_control_i <= wdata[4-1:0];  end
-
-            if (addr[19:0] == 20'h10)   begin   ddr_a_base_i <= {wdata[32-1:12],12'h000};   end
-            if (addr[19:0] == 20'h14)   begin   ddr_a_end_i  <= {wdata[32-1:12],12'h000};   end
-            if (addr[19:0] == 20'h18)   begin   ddr_b_base_i <= {wdata[32-1:12],12'h000};   end
-            if (addr[19:0] == 20'h1c)   begin   ddr_b_end_i  <= {wdata[32-1:12],12'h000};   end
-        end
-    end
-end
-
-
-// --------------------------------------------------------------------------------------------------
-// read
-always @(*) begin
-    err <= 1'b0;
-
-    if (addr[19:0] == 20'h00)   begin   ack <= 1'b1;    rdata <= {28'h0,ddr_control_i}; end
-
-    if (addr[19:0] == 20'h08)   begin   ack <= 1'b1;    rdata <= ddr_a_curr;    end
-    if (addr[19:0] == 20'h0c)   begin   ack <= 1'b1;    rdata <= ddr_b_curr;    end
-
-    if (addr[19:0] == 20'h10)   begin   ack <= 1'b1;    rdata <= ddr_a_base_i;  end
-    if (addr[19:0] == 20'h14)   begin   ack <= 1'b1;    rdata <= ddr_a_end_i;   end
-    if (addr[19:0] == 20'h18)   begin   ack <= 1'b1;    rdata <= ddr_b_base_i;  end
-    if (addr[19:0] == 20'h1c)   begin   ack <= 1'b1;    rdata <= ddr_b_end_i;   end
-end
-
-
-// --------------------------------------------------------------------------------------------------
-// bridge between Dumper and sys clock
-bus_clk_bridge i_bridge_hp0
-(
-    .sys_clk_i      (sys_clk_i      ),
-    .sys_rstn_i     (sys_rstn_i     ),
-    .sys_addr_i     (sys_addr_i     ),
-    .sys_wdata_i    (sys_wdata_i    ),
-    .sys_sel_i      (sys_sel_i      ),
-    .sys_wen_i      (sys_wen_i      ),
-    .sys_ren_i      (sys_ren_i      ),
-    .sys_rdata_o    (sys_rdata_o    ),
-    .sys_err_o      (sys_err_o      ),
-    .sys_ack_o      (sys_ack_o      ),
-
-    .clk_i          (buf_clk_i      ),
-    .rstn_i         (buf_rstn_i     ),
-    .addr_o         (addr           ),
-    .wdata_o        (wdata          ),
-    .wen_o          (wen            ),
-    .ren_o          (ren            ),
-    .rdata_i        (rdata          ),
-    .err_i          (err            ),
-    .ack_i          (ack            )
-);
-`endif
 
 
 endmodule
