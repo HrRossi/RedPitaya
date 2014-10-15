@@ -14,7 +14,7 @@
  */
 /*
  * 2014-10-15 Nils Roos <doctor@smart.ms>
- * Added infrastructure for ADC data transfer to DDR2 RAM through AXI HP bus
+ * Added infrastructure for ADC data transfer to DDR3 RAM through AXI HP bus
  */
 
  
@@ -163,19 +163,19 @@ wire             ps_sys_err         ;
 wire             ps_sys_ack         ;
 
 // ADC buffer
-wire [ 2-1:0]   adcbuf_select;  // channel buffer select
-wire [ 4-1:0]   adcbuf_ready;   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
-wire [12-1:0]   adcbuf_raddr;   // buffer read address
-wire [64-1:0]   adcbuf_rdata;   // buffer read data
+wire [   2-1:0] adcbuf_select;  // channel buffer select
+wire [   4-1:0] adcbuf_ready;   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+wire [  12-1:0] adcbuf_raddr;   // buffer read address
+wire [  64-1:0] adcbuf_rdata;   // buffer read data
 
 // DDR Dump parameters
-wire    [   32-1:0] ddr_a_base;     // DDR ChA buffer base address
-wire    [   32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
-wire    [   32-1:0] ddr_a_curr;     // DDR ChA current write address
-wire    [   32-1:0] ddr_b_base;     // DDR ChB buffer base address
-wire    [   32-1:0] ddr_b_end;      // DDR ChB buffer end address + 1
-wire    [   32-1:0] ddr_b_curr;     // DDR ChB current write address
-wire    [    4-1:0] ddr_control;    // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+wire [  32-1:0] ddr_a_base;     // DDR ChA buffer base address
+wire [  32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
+wire [  32-1:0] ddr_a_curr;     // DDR ChA current write address
+wire [  32-1:0] ddr_b_base;     // DDR ChB buffer base address
+wire [  32-1:0] ddr_b_end;      // DDR ChB buffer end address + 1
+wire [  32-1:0] ddr_b_curr;     // DDR ChB current write address
+wire [   4-1:0] ddr_control;    // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
 
 //---------------------------------------------------------------------------------
 //

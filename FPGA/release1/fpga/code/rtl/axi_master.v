@@ -89,13 +89,13 @@ module axi_dump2ddr_master #(
     input       [    4-1:0] ddr_control_i   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
 );
 
-localparam AXI_CW = 6;       // width of the ID expiry counters
-localparam AXI_CI = 6'h3f;   // initial countdown value for the ID expiry counters
+localparam AXI_CW = 4;       // width of the ID expiry counters
+localparam AXI_CI = 4'hf;   // initial countdown value for the ID expiry counters
 genvar CNT;
 
 
 // --------------------------------------------------------------------------------------------------
-// set unused outputs to 0
+// set unused outputs to 0 - when we implement scatter gather capability, we'll be needing these anyway
 assign  axi_araddr_o  = 32'd0;
 assign  axi_arburst_o = 2'd0;
 assign  axi_arcache_o = 4'd0;
@@ -327,7 +327,7 @@ assign  axi_bready_o  = 1'd1;
 
 
 // --------------------------------------------------------------------------------------------------
-// AXI ID control
+// AXI ID / outstanding writes control
 always @(posedge buf_clk_i) begin
     if (!buf_rstn_i) begin
         ddr_curr_id   <= 0;

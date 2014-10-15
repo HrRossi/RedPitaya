@@ -61,6 +61,11 @@ module red_pitaya_hk
 
 );
 
+/* ID values to be read by the device driver, mapped at 40000ff0 - 40000fff */
+localparam SYS_ID = 32'h00100001; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
+localparam SYS_1 = 32'h00000000;
+localparam SYS_2 = 32'h00000000;
+localparam SYS_3 = 32'h00000000;
 
 
 
@@ -249,19 +254,14 @@ always @(*) begin
 
      20'h00030 : begin sys_ack_o <= 1'b1;          sys_rdata_o <= {{32- 8{1'b0}}, led_reg[7:0]}                        ; end
 
+    20'h00ff0:  begin   sys_ack_o <= 1'b1; sys_rdata_o <= SYS_ID;   end
+    20'h00ff4:  begin   sys_ack_o <= 1'b1; sys_rdata_o <= SYS_1;    end
+    20'h00ff8:  begin   sys_ack_o <= 1'b1; sys_rdata_o <= SYS_2;    end
+    20'h00ffc:  begin   sys_ack_o <= 1'b1; sys_rdata_o <= SYS_3;    end
+
        default : begin sys_ack_o <= 1'b1;          sys_rdata_o <=  32'h0                                               ; end
    endcase
 end
-
-
-
-
-
-
-
-
-
-
 
 
 

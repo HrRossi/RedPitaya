@@ -97,10 +97,10 @@ module red_pitaya_scope
 );
 
 /* ID values to be read by the device driver, mapped at 40100ff0 - 40100fff */
-localparam SYS_ADC_ID = 32'h00000001;
-localparam SYS_ADC_1 = 32'h00000000;
-localparam SYS_ADC_2 = 32'h00000000;
-localparam SYS_ADC_3 = 32'h00000000;
+localparam SYS_ID = 32'h00200001; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
+localparam SYS_1 = 32'h00000000;
+localparam SYS_2 = 32'h00000000;
+localparam SYS_3 = 32'h00000000;
 
 
 wire [ 32-1: 0] addr         ;
@@ -600,11 +600,11 @@ always @(posedge adc_clk_i) begin
          if (addr[19:0]==20'h48)   set_b_filt_kk <= wdata[25-1:0] ;
          if (addr[19:0]==20'h4C)   set_b_filt_pp <= wdata[25-1:0] ;
 
-            if (addr[19:0]==20'h60) ddr_a_base  <= wdata;
-            if (addr[19:0]==20'h64) ddr_a_end   <= wdata;
-            if (addr[19:0]==20'h68) ddr_b_base  <= wdata;
-            if (addr[19:0]==20'h6c) ddr_b_end   <= wdata;
-            if (addr[19:0]==20'h70) ddr_control <= wdata[4-1:0];
+            if (addr[19:0] == 20'h100)  ddr_control <= wdata[4-1:0];
+            if (addr[19:0] == 20'h104)  ddr_a_base  <= wdata;
+            if (addr[19:0] == 20'h108)  ddr_a_end   <= wdata;
+            if (addr[19:0] == 20'h10c)  ddr_b_base  <= wdata;
+            if (addr[19:0] == 20'h110)  ddr_b_end   <= wdata;
       end
    end
 end
@@ -641,17 +641,18 @@ always @(*) begin
      20'h00048 : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_kk}      ; end
      20'h0004C : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_pp}      ; end
 
-    20'h00060:  begin   ack <= 1'b1;    rdata <= ddr_a_base;    end
-    20'h00064:  begin   ack <= 1'b1;    rdata <= ddr_a_end;     end
-    20'h00068:  begin   ack <= 1'b1;    rdata <= ddr_b_base;    end
-    20'h0006c:  begin   ack <= 1'b1;    rdata <= ddr_b_end;     end
-    20'h00074:  begin   ack <= 1'b1;    rdata <= ddr_a_curr_i;  end
-    20'h00078:  begin   ack <= 1'b1;    rdata <= ddr_b_curr_i;  end
+    20'h00104:  begin   ack <= 1'b1; rdata <= ddr_a_base;   end
+    20'h00108:  begin   ack <= 1'b1; rdata <= ddr_a_end;    end
+    20'h0010c:  begin   ack <= 1'b1; rdata <= ddr_b_base;   end
+    20'h00110:  begin   ack <= 1'b1; rdata <= ddr_b_end;    end
+    20'h00114:  begin   ack <= 1'b1; rdata <= ddr_a_curr_i; end
+    20'h00118:  begin   ack <= 1'b1; rdata <= ddr_b_curr_i; end
 
-    20'h00ff0:  begin   ack <= 1'b1;    rdata <= SYS_ADC_ID;    end
-    20'h00ff4:  begin   ack <= 1'b1;    rdata <= SYS_ADC_1;     end
-    20'h00ff8:  begin   ack <= 1'b1;    rdata <= SYS_ADC_2;     end
-    20'h00ffc:  begin   ack <= 1'b1;    rdata <= SYS_ADC_3;     end
+    20'h00ff0:  begin   ack <= 1'b1; rdata <= SYS_ID;       end
+    20'h00ff4:  begin   ack <= 1'b1; rdata <= SYS_1;        end
+    20'h00ff8:  begin   ack <= 1'b1; rdata <= SYS_2;        end
+    20'h00ffc:  begin   ack <= 1'b1; rdata <= SYS_3;        end
+
        default : begin ack <= 1'b1;          rdata <=  32'h0                              ; end
    endcase
 end
