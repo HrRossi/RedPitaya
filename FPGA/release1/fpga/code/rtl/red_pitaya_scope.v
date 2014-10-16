@@ -174,8 +174,8 @@ red_pitaya_dfilt1 i_dfilt1_chb
 //---------------------------------------------------------------------------------
 //  Decimate input data
 
-reg  [ 16-1: 0] adc_a_dat     ;
-reg  [ 16-1: 0] adc_b_dat     ;
+reg  [ 14-1: 0] adc_a_dat     ;
+reg  [ 14-1: 0] adc_b_dat     ;
 reg  [ 32-1: 0] adc_a_sum     ;
 reg  [ 32-1: 0] adc_b_sum     ;
 reg  [ 17-1: 0] set_dec       ;
@@ -230,7 +230,16 @@ wire    [64-1:0]    buf_b_data_o;
 
 localparam RSZ = 14 ;  // RAM size 2^RSZ
 
+reg   [  14-1: 0] adc_a_buf [0:(1<<RSZ)-1] ;
+reg   [  14-1: 0] adc_b_buf [0:(1<<RSZ)-1] ;
+reg   [  14-1: 0] adc_a_rd      ;
+reg   [  14-1: 0] adc_b_rd      ;
 reg   [ RSZ-1: 0] adc_wp        ;
+reg   [ RSZ-1: 0] adc_raddr     ;
+reg   [ RSZ-1: 0] adc_a_raddr   ;
+reg   [ RSZ-1: 0] adc_b_raddr   ;
+reg   [   4-1: 0] adc_rval      ;
+wire              adc_rd_dv     ;
 reg               adc_we        ;
 reg               adc_trig      ;
 
@@ -245,7 +254,7 @@ adc_buffer adc_a_buffer (
     .ena    (adc_dv             ),
     .wea    (adc_we             ),
     .addra  (adc_wp             ),
-    .dina   (adc_a_dat          ),
+    .dina   ({2'b00,adc_a_dat}  ),
     .clkb   (adcbuf_clk_i       ),
     .rstb   (!adcbuf_rstn_i     ),
     .enb    (adcbuf_select_i[0] ),
@@ -258,7 +267,7 @@ adc_buffer adc_b_buffer (
     .ena    (adc_dv             ),
     .wea    (adc_we             ),
     .addra  (adc_wp             ),
-    .dina   (adc_b_dat          ),
+    .dina   ({2'b00,adc_b_dat}  ),
     .clkb   (adcbuf_clk_i       ),
     .rstb   (!adcbuf_rstn_i     ),
     .enb    (adcbuf_select_i[1] ),
@@ -330,6 +339,30 @@ always @(posedge adc_clk_i) begin
     end
 end
 
+always @(posedge adc_clk_i) begin
+   if (adc_we && adc_dv) begin
+      adc_a_buf[adc_wp] <= adc_a_dat ;
+      adc_b_buf[adc_wp] <= adc_b_dat ;
+   end
+end
+
+// Read
+always @(posedge adc_clk_i) begin
+   if (adc_rstn_i == 1'b0)
+      adc_rval <= 4'h0 ;
+   else
+      adc_rval <= {adc_rval[2:0], (ren || wen)};
+end
+assign adc_rd_dv = adc_rval[3];
+
+always @(posedge adc_clk_i) begin
+   adc_raddr   <= addr[RSZ+1:2] ; // address synchronous to clock
+   adc_a_raddr <= adc_raddr     ; // double register 
+   adc_b_raddr <= adc_raddr     ; // otherwise memory corruption at reading
+   adc_a_rd    <= adc_a_buf[adc_a_raddr] ;
+   adc_b_rd    <= adc_b_buf[adc_b_raddr] ;
+end
+
 
 
 
@@ -395,14 +428,14 @@ reg  [  2-1: 0] adc_scht_ap  ;
 reg  [  2-1: 0] adc_scht_an  ;
 reg  [  2-1: 0] adc_scht_bp  ;
 reg  [  2-1: 0] adc_scht_bn  ;
-reg  [ 16-1: 0] set_a_tresh  ;
-reg  [ 16-1: 0] set_a_treshp ;
-reg  [ 16-1: 0] set_a_treshm ;
-reg  [ 16-1: 0] set_b_tresh  ;
-reg  [ 16-1: 0] set_b_treshp ;
-reg  [ 16-1: 0] set_b_treshm ;
-reg  [ 16-1: 0] set_a_hyst   ;
-reg  [ 16-1: 0] set_b_hyst   ;
+reg  [ 14-1: 0] set_a_tresh  ;
+reg  [ 14-1: 0] set_a_treshp ;
+reg  [ 14-1: 0] set_a_treshm ;
+reg  [ 14-1: 0] set_b_tresh  ;
+reg  [ 14-1: 0] set_b_treshp ;
+reg  [ 14-1: 0] set_b_treshm ;
+reg  [ 14-1: 0] set_a_hyst   ;
+reg  [ 14-1: 0] set_b_hyst   ;
 
 always @(posedge adc_clk_i) begin
    if (adc_rstn_i == 1'b0) begin
@@ -560,12 +593,12 @@ assign ddr_control_o = ddr_control;
 
 always @(posedge adc_clk_i) begin
    if (adc_rstn_i == 1'b0) begin
-      set_a_tresh   <=  16'd20000  ;
-      set_b_tresh   <= -16'd20000  ;
+      set_a_tresh   <=  14'd5000   ;
+      set_b_tresh   <= -14'd5000   ;
       set_dly       <=  32'd0      ;
       set_dec       <=  17'd1      ;
-      set_a_hyst    <=  16'd80     ;
-      set_b_hyst    <=  16'd80     ;
+      set_a_hyst    <=  14'd20     ;
+      set_b_hyst    <=  14'd20     ;
       set_avg_en    <=   1'b1      ;
       set_a_filt_aa <=  18'h0      ;
       set_a_filt_bb <=  25'h0      ;
@@ -583,12 +616,12 @@ always @(posedge adc_clk_i) begin
    end
    else begin
       if (wen) begin
-         if (addr[19:0]==20'h8)    set_a_tresh <= wdata[16-1:0] ;
-         if (addr[19:0]==20'hC)    set_b_tresh <= wdata[16-1:0] ;
+         if (addr[19:0]==20'h8)    set_a_tresh <= wdata[14-1:0] ;
+         if (addr[19:0]==20'hC)    set_b_tresh <= wdata[14-1:0] ;
          if (addr[19:0]==20'h10)   set_dly     <= wdata[32-1:0] ;
          if (addr[19:0]==20'h14)   set_dec     <= wdata[17-1:0] ;
-         if (addr[19:0]==20'h20)   set_a_hyst  <= wdata[16-1:0] ;
-         if (addr[19:0]==20'h24)   set_b_hyst  <= wdata[16-1:0] ;
+         if (addr[19:0]==20'h20)   set_a_hyst  <= wdata[14-1:0] ;
+         if (addr[19:0]==20'h24)   set_b_hyst  <= wdata[14-1:0] ;
          if (addr[19:0]==20'h28)   set_avg_en  <= wdata[     0] ;
 
          if (addr[19:0]==20'h30)   set_a_filt_aa <= wdata[18-1:0] ;
@@ -616,19 +649,19 @@ end
 always @(*) begin
    err <= 1'b0 ;
 
-   case (addr[19:0])
+   casez (addr[19:0])
      20'h00004 : begin ack <= 1'b1;          rdata <= {{32- 4{1'b0}}, set_trig_src}       ; end 
 
-     20'h00008 : begin ack <= 1'b1;          rdata <= {{32-16{1'b0}}, set_a_tresh}        ; end
-     20'h0000C : begin ack <= 1'b1;          rdata <= {{32-16{1'b0}}, set_b_tresh}        ; end
+     20'h00008 : begin ack <= 1'b1;          rdata <= {{32-14{1'b0}}, set_a_tresh}        ; end
+     20'h0000C : begin ack <= 1'b1;          rdata <= {{32-14{1'b0}}, set_b_tresh}        ; end
      20'h00010 : begin ack <= 1'b1;          rdata <= {               set_dly}            ; end
      20'h00014 : begin ack <= 1'b1;          rdata <= {{32-17{1'b0}}, set_dec}            ; end
 
      20'h00018 : begin ack <= 1'b1;          rdata <= {{32-RSZ{1'b0}}, adc_wp_cur}        ; end
      20'h0001C : begin ack <= 1'b1;          rdata <= {{32-RSZ{1'b0}}, adc_wp_trig}       ; end
 
-     20'h00020 : begin ack <= 1'b1;          rdata <= {{32-16{1'b0}}, set_a_hyst}         ; end
-     20'h00024 : begin ack <= 1'b1;          rdata <= {{32-16{1'b0}}, set_b_hyst}         ; end
+     20'h00020 : begin ack <= 1'b1;          rdata <= {{32-14{1'b0}}, set_a_hyst}         ; end
+     20'h00024 : begin ack <= 1'b1;          rdata <= {{32-14{1'b0}}, set_b_hyst}         ; end
 
      20'h00028 : begin ack <= 1'b1;          rdata <= {{32- 1{1'b0}}, set_avg_en}         ; end
 
@@ -652,6 +685,9 @@ always @(*) begin
     20'h00ff4:  begin   ack <= 1'b1; rdata <= SYS_1;        end
     20'h00ff8:  begin   ack <= 1'b1; rdata <= SYS_2;        end
     20'h00ffc:  begin   ack <= 1'b1; rdata <= SYS_3;        end
+
+     20'h1???? : begin ack <= adc_rd_dv;     rdata <= {16'h0, 2'h0,adc_a_rd}              ; end
+     20'h2???? : begin ack <= adc_rd_dv;     rdata <= {16'h0, 2'h0,adc_b_rd}              ; end
 
        default : begin ack <= 1'b1;          rdata <=  32'h0                              ; end
    endcase
