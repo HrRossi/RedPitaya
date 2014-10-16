@@ -49,7 +49,9 @@ static struct file_operations rpad_fops = {
 	.mmap    = rpad_mmap,
 };
 
-
+/*
+ * fills the text_page with fresh human readable data from the DDR buffer
+ */
 static size_t prepare_output_buffer(struct rpad_device *dev)
 {
 	int write_index;
@@ -71,6 +73,12 @@ static size_t prepare_output_buffer(struct rpad_device *dev)
 	return write_index;
 }
 
+/*
+ * specific operations done during open are still in flux
+ *
+ * initializes hardware and allocates text_page, if not already done. resets
+ * the singular current read pointer und prepares the first batch of data.
+ */
 static int rpad_open(struct inode *inodp, struct file *filp)
 {
 	int retval = 0;
@@ -105,6 +113,11 @@ out:
 	return retval;
 }
 
+/*
+ * specific operations done during release are still in flux
+ *
+ * frees text_page, marks device uninitialized.
+ */
 static int rpad_release(struct inode *inodp, struct file *filp)
 {
 	struct rpad_device *dev = (struct rpad_device *)filp->private_data;
@@ -122,6 +135,14 @@ static int rpad_release(struct inode *inodp, struct file *filp)
 	return 0;
 }
 
+/*
+ * specific operations done during read are still in flux
+ *
+ * feeds the unread part of text_page to userspace, attempts to refill the page
+ * if it is currently fully read. no heed is given to the file offset, every
+ * read gets data from the singular, ever progressing current read position.
+ * (meaning, you will get all channel A data first and then all channel B data)
+ */
 static ssize_t rpad_read(struct file *filp, char __user *ubuf, size_t usize, loff_t *uoffp)
 {
 	ssize_t length;
@@ -164,6 +185,9 @@ static int rpad_mmap(struct file *filp, struct vm_area_struct *vma)
 	return -EINVAL;
 }
 
+/*
+ * allocates memory buffers and io address blocks
+ */
 static int rpad_resources_alloc(struct rpad_device *dev)
 {
 	// FIXME dma_alloc_coherent mit ordentlichem device ?
@@ -177,13 +201,12 @@ static int rpad_resources_alloc(struct rpad_device *dev)
 	dev->hw_init_done = 0;
 
 	//if (dma_set_coherent_mask(dev, DMA_BIT_MASK(32))) {
-	//	printk(KERN_WARNING
-	//	       "rp_adc2ddr: no suitable DMA available\n");
+	//	printk(KERN_WARNING "rpad: no suitable DMA available\n");
 	//	return -ENOMEM;
 	//}
 
 	for (size = rpad_maxsize; size >= rpad_minsize; size >>= 1) {
-		printk(KERN_ALERT "rp_adc2ddr: trying buffer size %x\n", size);
+		printk(KERN_ALERT "rpad: trying buffer size %x\n", size);
 		//cpu_addr = dma_alloc_coherent(dev, size, &dma_handle, GFP_DMA);
 		//if (!IS_ERR_OR_NULL(cpu_addr))
 		//	break;
@@ -193,8 +216,7 @@ static int rpad_resources_alloc(struct rpad_device *dev)
 			break;
 	}
 	if (size < rpad_minsize) {
-		printk(KERN_WARNING
-		       "rp_adc2ddr: not enough contiguous memory\n");
+		printk(KERN_WARNING "rpad: not enough contiguous memory\n");
 		return -ENOMEM;
 	}
 
@@ -203,15 +225,15 @@ static int rpad_resources_alloc(struct rpad_device *dev)
 	//dev->buffer_phys_addr = dma_handle;
 	dev->buffer_phys_addr = virt_to_phys((void *)cpu_addr); // FIXME we're not supposed to use virt_to_phys
 
-	printk(KERN_ALERT "rp_adc2ddr: virt %p\n", (void *)dev->buffer_addr);
-	printk(KERN_ALERT "rp_adc2ddr: phys %p\n", (void *)dev->buffer_phys_addr);
+	printk(KERN_ALERT "rpad: virt %p\n", (void *)dev->buffer_addr);
+	printk(KERN_ALERT "rpad: phys %p\n", (void *)dev->buffer_phys_addr);
 
-	dev->scope = request_mem_region(RPAD_ADC_BASE, RPAD_PL_SECTION_LENGTH,
+	dev->scope = request_mem_region(RPAD_SCO_BASE, RPAD_PL_SECTION_LENGTH,
 	                                "rpad_scope");
 	if (!dev->scope)
 		goto error_free;
 
-	dev->scope_base = ioremap_nocache(RPAD_ADC_BASE, RPAD_PL_SECTION_LENGTH);
+	dev->scope_base = ioremap_nocache(RPAD_SCO_BASE, RPAD_PL_SECTION_LENGTH);
 	if (!dev->scope_base)
 		goto error_rel;
 
@@ -220,23 +242,29 @@ static int rpad_resources_alloc(struct rpad_device *dev)
 	return 0;
 
 error_rel:
-	release_mem_region(RPAD_ADC_BASE, RPAD_PL_SECTION_LENGTH);
+	release_mem_region(RPAD_SCO_BASE, RPAD_PL_SECTION_LENGTH);
 error_free:
 	free_pages(cpu_addr, order_base_2(size >> PAGE_SHIFT));
 
 	return -EBUSY;
 }
 
+/*
+ * frees all allocated memory buffers and io address blocks
+ */
 static inline void rpad_resources_free(struct rpad_device *dev)
 {
 	iounmap(dev->scope_base);
-	release_mem_region(RPAD_ADC_BASE, RPAD_PL_SECTION_LENGTH);
+	release_mem_region(RPAD_SCO_BASE, RPAD_PL_SECTION_LENGTH);
 
 	//dma_free_coherent(dev, size, cpu_addr, dma_handle);
 	free_pages(dev->buffer_addr,
 	           order_base_2(dev->buffer_size >> PAGE_SHIFT));
 }
 
+/*
+ * requisitions the major/minor device number(s) given through module params
+ */
 static int rpad_device_register(struct rpad_device *dev)
 {
 	int ret;
@@ -250,39 +278,46 @@ static int rpad_device_register(struct rpad_device *dev)
 	}
 	if (ret < 0) {
 		printk(KERN_WARNING
-		       "rp_adc2ddr: can't get major %d\n", rpad_major);
+		       "rpad: can't get major %d\n", rpad_major);
 		return ret;
 	}
 	rpad_major = MAJOR(devt);
 
 	if (RPAD_CHANNELS > 1)
-		printk(KERN_ALERT "rp_adc2ddr: registered as %u:%u-%u\n",
+		printk(KERN_ALERT "rpad: registered as %u:%u-%u\n",
 		       rpad_major, rpad_minor, rpad_minor + RPAD_CHANNELS - 1);
 	else
-		printk(KERN_ALERT "rp_adc2ddr: registered as %u:%u\n",
+		printk(KERN_ALERT "rpad: registered as %u:%u\n",
 		       rpad_major, rpad_minor);
 
 	return 0;
 }
 
+/*
+ * releases the major/minor device number(s)
+ */
 static inline void rpad_device_unregister(void)
 {
 	unregister_chrdev_region(MKDEV(rpad_major, rpad_minor), RPAD_CHANNELS);
 }
 
+/*
+ * registers the module's components (device, class, char device) with the
+ * kernel
+ */
 static int rpad_device_activate(struct rpad_device *dev)
 {
 	int ret;
 
 	ret = rpad_setup_device_class();
 	if (ret) {
-		printk(KERN_ALERT "rp_adc2ddr: class setup error\n");
+		printk(KERN_ALERT "rpad: class setup error\n");
 		return ret;
 	}
 	ret = rpad_setup_device(NULL, MKDEV(rpad_major, rpad_minor));
 	if (ret) {
 		rpad_release_device_class();
-		printk(KERN_ALERT "rp_adc2ddr: device setup error\n");
+		printk(KERN_ALERT "rpad: device setup error\n");
 		return ret;
 	}
 
@@ -293,13 +328,16 @@ static int rpad_device_activate(struct rpad_device *dev)
 	if (ret) {
 		rpad_release_device(MKDEV(rpad_major, rpad_minor));
 		rpad_release_device_class();
-		printk(KERN_WARNING "rp_adc2ddr: can't add char device\n");
+		printk(KERN_WARNING "rpad: can't add char device\n");
 		return ret;
 	}
 
 	return 0;
 }
 
+/*
+ * detaches the module's components (device, class, char device) from the kernel
+ */
 static inline void rpad_device_deactivate(struct rpad_device *dev)
 {
 	cdev_del(&dev->cdev);
@@ -311,7 +349,7 @@ static int __init rpad_init(void)
 {
 	int ret;
 
-	printk(KERN_ALERT "Module rp_adc2ddr loading\n");
+	printk(KERN_ALERT "Module rpad loading\n");
 
 	ret = rpad_device_register(&rpad_dev);
 	if (ret)
@@ -325,7 +363,7 @@ static int __init rpad_init(void)
 	if (ret)
 		goto error_free;
 
-	printk(KERN_ALERT "Module rp_adc2ddr loaded\n");
+	printk(KERN_ALERT "Module rpad loaded\n");
 
 	return 0;
 
@@ -334,20 +372,20 @@ error_free:
 error_unreg:
 	rpad_device_unregister();
 error_msg:
-	printk(KERN_ALERT "Module rp_adc2ddr not loaded\n");
+	printk(KERN_ALERT "Module rpad not loaded\n");
 
 	return ret;
 }
 
 static void __exit rpad_exit(void)
 {
-	printk(KERN_ALERT "Module rp_adc2ddr unloading\n");
+	printk(KERN_ALERT "Module rpad unloading\n");
 
 	rpad_device_deactivate(&rpad_dev);
 	rpad_resources_free(&rpad_dev);
 	rpad_device_unregister();
 
-	printk(KERN_ALERT "Module rp_adc2ddr unloaded\n");
+	printk(KERN_ALERT "Module rpad unloaded\n");
 }
 
 module_init(rpad_init);
@@ -360,4 +398,4 @@ module_param(rpad_maxsize, uint, S_IRUGO);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Nils Roos");
-MODULE_DESCRIPTION("RedPitaya ADC to DDR driver");
+MODULE_DESCRIPTION("RedPitaya architecture driver");
