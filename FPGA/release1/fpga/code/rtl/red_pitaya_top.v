@@ -140,8 +140,10 @@ module red_pitaya_top
 
 );
 
-
-
+localparam SYSCONF_ID      = 32'hfff00001; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
+localparam SYSCONF_REGIONS = 32'd8; // number of regions supported by the sysbus
+localparam SYSR = SYSCONF_REGIONS;
+genvar CNT,CNT1;
 
 
 //---------------------------------------------------------------------------------
@@ -187,59 +189,63 @@ wire                sys_rstn   = ps_sys_rstn     ;
 wire  [    32-1: 0] sys_addr   = ps_sys_addr     ;
 wire  [    32-1: 0] sys_wdata  = ps_sys_wdata    ;
 wire  [     4-1: 0] sys_sel    = ps_sys_sel      ;
-wire  [     8-1: 0] sys_wen    ;
-wire  [     8-1: 0] sys_ren    ;
-wire  [(8*32)-1: 0] sys_rdata  ;
-wire  [ (8*1)-1: 0] sys_err    ;
-wire  [ (8*1)-1: 0] sys_ack    ;
-reg   [     8-1: 0] sys_cs     ;
+wire  [     SYSR-1: 0] sys_wen    ;
+wire  [     SYSR-1: 0] sys_ren    ;
+wire  [(SYSR*32)-1: 0] sys_rdata  ;
+wire  [ (SYSR*1)-1: 0] sys_err    ;
+wire  [ (SYSR*1)-1: 0] sys_ack    ;
+reg   [     SYSR-1: 0] sys_cs     ;
+
+reg  [  32-1:0] sysconf_rdata;
+reg             sysconf_err;
+reg             sysconf_ack;
+reg             sysconf_cs;
 
 always @(sys_addr) begin
-   sys_cs = 8'h0 ;
-   case (sys_addr[22:20])
-      3'h0, 3'h1, 3'h2, 3'h3, 3'h4, 3'h5, 3'h6, 3'h7 : 
-         sys_cs[sys_addr[22:20]] = 1'b1 ; 
-   endcase
+    sys_cs     = 8'h00;
+    if (sys_addr[29:20] < SYSCONF_REGIONS) begin
+        sys_cs[sys_addr[29:20]] = 1'b1;
+    end
+    sysconf_cs = 1'b0;
+    if (sys_addr[29:20] == 10'h3ff) begin
+        sysconf_cs = 1'b1;
+    end
 end
 
-assign sys_wen = sys_cs & {8{ps_sys_wen}}  ;
-assign sys_ren = sys_cs & {8{ps_sys_ren}}  ;
+assign sys_wen = sys_cs & {SYSR{ps_sys_wen}}  ;
+assign sys_ren = sys_cs & {SYSR{ps_sys_ren}}  ;
 
+// multiplex outputs of the sysregion blocks onto PS sysbus by cs plus sysconf
+// arbitrary (but in this case fixed to 32) width by arbitrary number of channels bus multiplexer
+wire [SYSR*32-1:0] sys_rdata_s;
+generate for (CNT=0; CNT<32; CNT=CNT+1) begin
+    for (CNT1=0; CNT1<SYSR; CNT1=CNT1+1) begin
+        assign sys_rdata_s[CNT*SYSR+CNT1] = sys_rdata[CNT1*32+CNT]; // reshuffle to align with sys_cs per bitline
+    end
+    assign ps_sys_rdata[CNT] = |(sys_cs & sys_rdata_s[CNT*SYSR+:SYSR]) | sysconf_cs & sysconf_rdata[CNT];
+end endgenerate
 
-assign ps_sys_rdata = {32{sys_cs[ 0]}} & sys_rdata[ 0*32+31: 0*32] |
-                      {32{sys_cs[ 1]}} & sys_rdata[ 1*32+31: 1*32] |
-                      {32{sys_cs[ 2]}} & sys_rdata[ 2*32+31: 2*32] |
-                      {32{sys_cs[ 3]}} & sys_rdata[ 3*32+31: 3*32] |
-                      {32{sys_cs[ 4]}} & sys_rdata[ 4*32+31: 4*32] | 
-                      {32{sys_cs[ 5]}} & sys_rdata[ 5*32+31: 5*32] |
-                      {32{sys_cs[ 6]}} & sys_rdata[ 6*32+31: 6*32] |
-                      {32{sys_cs[ 7]}} & sys_rdata[ 7*32+31: 7*32] ; 
+assign ps_sys_err = |(sys_cs & sys_err) | sysconf_cs & sysconf_err;
+assign ps_sys_ack = |(sys_cs & sys_ack) | sysconf_cs & sysconf_ack;
 
-assign ps_sys_err   = sys_cs[ 0] & sys_err[  0] |
-                      sys_cs[ 1] & sys_err[  1] |
-                      sys_cs[ 2] & sys_err[  2] |
-                      sys_cs[ 3] & sys_err[  3] |
-                      sys_cs[ 4] & sys_err[  4] | 
-                      sys_cs[ 5] & sys_err[  5] |
-                      sys_cs[ 6] & sys_err[  6] |
-                      sys_cs[ 7] & sys_err[  7] ; 
+// generate sane signals for unused regions
+generate for (CNT=6; CNT<SYSR; CNT=CNT+1) begin
+assign sys_rdata[CNT*32+:32] = 32'h0;
+assign sys_err[CNT] = 1'b0;
+assign sys_ack[CNT] = 1'b1;
+end endgenerate
 
-assign ps_sys_ack   = sys_cs[ 0] & sys_ack[  0] |
-                      sys_cs[ 1] & sys_ack[  1] |
-                      sys_cs[ 2] & sys_ack[  2] |
-                      sys_cs[ 3] & sys_ack[  3] |
-                      sys_cs[ 4] & sys_ack[  4] | 
-                      sys_cs[ 5] & sys_ack[  5] |
-                      sys_cs[ 6] & sys_ack[  6] |
-                      sys_cs[ 7] & sys_ack[  7] ; 
+// the sysbus now has some static configuration values that will be queried by the rpad driver
+always @(*) begin
+    sysconf_ack <= 1'b1;
+    sysconf_err <= 1'b0;
 
-assign sys_rdata[ 6*32+31: 6*32] = 32'h0;
-assign sys_err[6] = 1'b0;
-assign sys_ack[6] = 1'b1;
-
-assign sys_rdata[ 7*32+31: 7*32] = 32'h0;
-assign sys_err[7] = 1'b0;
-assign sys_ack[7] = 1'b1;
+    case (sys_addr[19:0])
+    20'hf0000:  sysconf_rdata <= SYSCONF_ID;
+    20'hf0004:  sysconf_rdata <= SYSCONF_REGIONS;
+    default:    sysconf_rdata <= 32'h0;
+    endcase
+end
 
 
 red_pitaya_ps i_ps
