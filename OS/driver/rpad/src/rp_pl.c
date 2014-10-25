@@ -9,326 +9,174 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/types.h>
-#include <linux/mm_types.h>
 #include <linux/errno.h>
-#include <linux/device.h>
-#include <linux/cdev.h>
-#include <linux/dma-mapping.h>
-#include <linux/stat.h>
-#include <linux/fs.h>
-#include <linux/gfp.h>
 #include <linux/slab.h>
-#include <linux/ioport.h>
-#include <asm/io.h>
-#include <asm/uaccess.h>
+#include <linux/fs.h>
 
 #include "rp_pl_hw.h"
 #include "rp_pl_dev.h"
 #include "rp_pl.h"
 
+static unsigned int		major = 0;
+static unsigned int		minor = 0;
 
-static size_t rpad_minsize = 0x00010000;
-static size_t rpad_maxsize = 0x00400000;
-static unsigned int rpad_major = 0;
-static unsigned int rpad_minor = 0;
-
-static struct rpad_device rpad_dev;
-
-static int rpad_open(struct inode *, struct file *);
-static int rpad_release(struct inode *, struct file *);
-static ssize_t rpad_read(struct file *, char __user *, size_t, loff_t *);
-static ssize_t rpad_write(struct file *, const char __user *, size_t, loff_t *);
-static int rpad_mmap(struct file *, struct vm_area_struct *);
-
-static struct file_operations rpad_fops = {
-	.owner   = THIS_MODULE,
-	.open    = rpad_open,
-	.release = rpad_release,
-	.read    = rpad_read,
-	.write   = rpad_write,
-	.mmap    = rpad_mmap,
-};
+static struct rpad_sysconfig	rpad_sys;
 
 /*
- * fills the text_page with fresh human readable data from the DDR buffer
+ * create mapping to sysconfig io address block.
  */
-static size_t prepare_output_buffer(struct rpad_device *dev)
+static int rpad_map_sysconfig_io(void)
 {
-	int write_index;
+	if (!request_mem_region(RPAD_PL_SYS_RESERVED,
+	                        RPAD_PL_END - RPAD_PL_SYS_RESERVED,
+	                        "rpad_sysconfig"))
+		return -EBUSY;
 
-	if (dev->crp >= dev->buffer_end)
-		return 0;
-
-	for (write_index = 0; write_index < PAGE_SIZE - 1; write_index += 8) {
-		if (unlikely(dev->crp >= dev->buffer_end))
-			break;
-
-		sprintf(&dev->text_page[write_index],"   %04x\n",
-		        *((u16 *)(dev->crp)));
-		dev->crp += 2;
+	rpad_sys.sys_base =
+		ioremap_nocache(RPAD_PL_SYS_RESERVED,
+		                RPAD_PL_END - RPAD_PL_SYS_RESERVED);
+	if (!rpad_sys.sys_base) {
+		release_mem_region(RPAD_PL_SYS_RESERVED,
+		                   RPAD_PL_END - RPAD_PL_SYS_RESERVED);
+		return -EBUSY;
 	}
-	dev->read_index = 0;
-	dev->max_index = write_index;
-
-	return write_index;
-}
-
-/*
- * specific operations done during open are still in flux
- *
- * initializes hardware and allocates text_page, if not already done. resets
- * the singular current read pointer und prepares the first batch of data.
- */
-static int rpad_open(struct inode *inodp, struct file *filp)
-{
-	int retval = 0;
-	struct rpad_device *dev;
-
-	dev = container_of(inodp->i_cdev, struct rpad_device, cdev);
-	filp->private_data = dev;
-
-	if (down_interruptible(&dev->sem))
-		return -ERESTARTSYS;
-
-	if (!dev->hw_init_done) {
-		dev->text_page = (char *)get_zeroed_page(GFP_KERNEL);
-		if (!dev->text_page) {
-			retval = -ENOMEM;
-			goto out;
-		}
-
-		test_hardware(dev);
-		dev->buffer_end = dev->buffer_addr + dev->buffer_size;
-
-		dev->hw_init_done = 1;
-	}
-
-	dev->crp = dev->buffer_addr;
-	dev->read_index = PAGE_SIZE;
-	prepare_output_buffer(dev);
-
-out:
-	up(&dev->sem);
-
-	return retval;
-}
-
-/*
- * specific operations done during release are still in flux
- *
- * frees text_page, marks device uninitialized.
- */
-static int rpad_release(struct inode *inodp, struct file *filp)
-{
-	struct rpad_device *dev = (struct rpad_device *)filp->private_data;
-
-	if (down_interruptible(&dev->sem))
-		return -ERESTARTSYS;
-
-	if (dev->hw_init_done) {
-		free_page((unsigned long)dev->text_page);
-		dev->hw_init_done = 0;
-	}
-
-	up(&dev->sem);
 
 	return 0;
 }
 
 /*
- * specific operations done during read are still in flux
- *
- * feeds the unread part of text_page to userspace, attempts to refill the page
- * if it is currently fully read. no heed is given to the file offset, every
- * read gets data from the singular, ever progressing current read position.
- * (meaning, you will get all channel A data first and then all channel B data)
+ * release sysconfig io address block.
  */
-static ssize_t rpad_read(struct file *filp, char __user *ubuf, size_t usize, loff_t *uoffp)
+static inline void rpad_unmap_sysconfig_io(void)
 {
-	ssize_t length;
-	struct rpad_device *dev = (struct rpad_device *)filp->private_data;
-
-	if (down_interruptible(&dev->sem))
-		return -ERESTARTSYS;
-
-	length = dev->max_index - dev->read_index;
-	if (length <= 0 || dev->read_index < 0)
-		length = prepare_output_buffer(dev);
-	if (length == 0)
-		goto out;
-
-	if ((size_t)length > usize)
-		length = usize;
-
-	if (copy_to_user(ubuf, &dev->text_page[dev->read_index], length)) {
-		length = -EFAULT;
-		goto out;
-	}
-	dev->read_index += length;
-	*uoffp += length;
-
-out:
-	up(&dev->sem);
-
-	return length;
-}
-
-static ssize_t rpad_write(struct file *filp, const char __user *ubuf, size_t usize, loff_t *uoffp)
-{
-	// TODO
-	return -EINVAL;
-}
-
-static int rpad_mmap(struct file *filp, struct vm_area_struct *vma)
-{
-	// TODO
-	return -EINVAL;
+	iounmap(rpad_sys.sys_base);
+	release_mem_region(RPAD_PL_SYS_RESERVED,
+	                   RPAD_PL_END - RPAD_PL_SYS_RESERVED);
 }
 
 /*
- * allocates memory buffers and io address blocks
+ * prepare architectural components.
+ * - major/minor device number(s) given through module params and sysconfig
+ *   enumeration.
+ * - "rpad" device class
  */
-static int rpad_resources_alloc(struct rpad_device *dev)
-{
-	// FIXME dma_alloc_coherent mit ordentlichem device ?
-	//dma_addr_t dma_handle;
-	//void *cpu_addr;
-	//size_t size;
-	//struct device *dev;
-	unsigned long cpu_addr;
-	unsigned int size;
-
-	dev->hw_init_done = 0;
-
-	//if (dma_set_coherent_mask(dev, DMA_BIT_MASK(32))) {
-	//	printk(KERN_WARNING "rpad: no suitable DMA available\n");
-	//	return -ENOMEM;
-	//}
-
-	for (size = rpad_maxsize; size >= rpad_minsize; size >>= 1) {
-		printk(KERN_ALERT "rpad: trying buffer size %x\n", size);
-		//cpu_addr = dma_alloc_coherent(dev, size, &dma_handle, GFP_DMA);
-		//if (!IS_ERR_OR_NULL(cpu_addr))
-		//	break;
-		cpu_addr = __get_free_pages(GFP_KERNEL,
-		                            order_base_2(size >> PAGE_SHIFT));
-		if (cpu_addr)
-			break;
-	}
-	if (size < rpad_minsize) {
-		printk(KERN_WARNING "rpad: not enough contiguous memory\n");
-		return -ENOMEM;
-	}
-
-	dev->buffer_addr = cpu_addr;
-	dev->buffer_size = size;
-	//dev->buffer_phys_addr = dma_handle;
-	dev->buffer_phys_addr = virt_to_phys((void *)cpu_addr); // FIXME we're not supposed to use virt_to_phys
-
-	printk(KERN_ALERT "rpad: virt %p\n", (void *)dev->buffer_addr);
-	printk(KERN_ALERT "rpad: phys %p\n", (void *)dev->buffer_phys_addr);
-
-	dev->scope = request_mem_region(RPAD_SCO_BASE, RPAD_PL_SECTION_LENGTH,
-	                                "rpad_scope");
-	if (!dev->scope)
-		goto error_free;
-
-	dev->scope_base = ioremap_nocache(RPAD_SCO_BASE, RPAD_PL_SECTION_LENGTH);
-	if (!dev->scope_base)
-		goto error_rel;
-
-	sema_init(&dev->sem, 1);
-
-	return 0;
-
-error_rel:
-	release_mem_region(RPAD_SCO_BASE, RPAD_PL_SECTION_LENGTH);
-error_free:
-	free_pages(cpu_addr, order_base_2(size >> PAGE_SHIFT));
-
-	return -EBUSY;
-}
-
-/*
- * frees all allocated memory buffers and io address blocks
- */
-static inline void rpad_resources_free(struct rpad_device *dev)
-{
-	iounmap(dev->scope_base);
-	release_mem_region(RPAD_SCO_BASE, RPAD_PL_SECTION_LENGTH);
-
-	//dma_free_coherent(dev, size, cpu_addr, dma_handle);
-	free_pages(dev->buffer_addr,
-	           order_base_2(dev->buffer_size >> PAGE_SHIFT));
-}
-
-/*
- * requisitions the major/minor device number(s) given through module params
- */
-static int rpad_device_register(struct rpad_device *dev)
+static int rpad_prepare_architecture(void)
 {
 	int ret;
 	dev_t devt;
 
-	if (rpad_major) {
-		devt = MKDEV(rpad_major, rpad_minor);
-		ret = register_chrdev_region(devt, RPAD_CHANNELS, "rpad");
+	if (major) {
+		devt = MKDEV(major, minor);
+		ret = register_chrdev_region(devt, rpad_sys.nr_of_regions,
+		                             "rpad");
 	} else {
-		ret = alloc_chrdev_region(&devt, rpad_minor, RPAD_CHANNELS, "rpad");
+		ret = alloc_chrdev_region(&devt, minor, rpad_sys.nr_of_regions,
+		                          "rpad");
 	}
 	if (ret < 0) {
-		printk(KERN_WARNING
-		       "rpad: can't get major %d\n", rpad_major);
+		printk(KERN_WARNING "rpad: can't get major %u\n", major);
 		return ret;
 	}
-	rpad_major = MAJOR(devt);
+	major = MAJOR(devt);
 
-	if (RPAD_CHANNELS > 1)
-		printk(KERN_ALERT "rpad: registered as %u:%u-%u\n",
-		       rpad_major, rpad_minor, rpad_minor + RPAD_CHANNELS - 1);
-	else
-		printk(KERN_ALERT "rpad: registered as %u:%u\n",
-		       rpad_major, rpad_minor);
+	rpad_sys.devclass = class_create(THIS_MODULE, "rpad");
+	if (IS_ERR(rpad_sys.devclass)) {
+		printk(KERN_WARNING "rpad: class setup error\n");
+		unregister_chrdev_region(MKDEV(major, minor),
+		                         rpad_sys.nr_of_regions);
+		return PTR_ERR(rpad_sys.devclass);
+	}
+
+	printk(KERN_INFO "rpad: registered as %u:%u-%u\n", major, minor,
+	       minor + rpad_sys.nr_of_regions - 1);
 
 	return 0;
 }
 
 /*
- * releases the major/minor device number(s)
+ * reverse preparations.
  */
-static inline void rpad_device_unregister(void)
+static inline void rpad_unprepare_architecture(void)
 {
-	unregister_chrdev_region(MKDEV(rpad_major, rpad_minor), RPAD_CHANNELS);
+	class_destroy(rpad_sys.devclass);
+	unregister_chrdev_region(MKDEV(major, minor), rpad_sys.nr_of_regions);
 }
 
 /*
- * registers the module's components (device, class, char device) with the
- * kernel
+ * prepare rpad_device's common components and register them with the kernel.
+ * only things that can legally be copied into the final subtype structure later
+ * are prepared here:
+ * - device number
+ * - device
+ * - io mapping
  */
-static int rpad_device_activate(struct rpad_device *dev)
+static int rpad_prepare_device(struct rpad_device *rp_dev,
+                               dev_t devt,
+                               int region_nr,
+                               unsigned int sub_minor)
+{
+	struct rpad_devtype_data *data = rp_dev->data;
+
+	rp_dev->sys_addr = RPAD_PL_BASE + region_nr * RPAD_PL_REGION_SIZE;
+	rp_dev->devt = devt;
+
+	rp_dev->dev = device_create(rpad_sys.devclass, NULL, devt, NULL,
+	                            "rpad_%s%d", data->name, sub_minor);
+	if (IS_ERR(rp_dev->dev)) {
+		printk(KERN_WARNING "rpad_%s%d: setup error\n", data->name,
+		       sub_minor);
+		return PTR_ERR(rp_dev->dev);
+	}
+
+	if (!request_mem_region(rp_dev->sys_addr, RPAD_PL_REGION_SIZE,
+	                        rp_dev->dev->kobj.name)) {
+		printk(KERN_WARNING "rpad_%s%d: io region blocked\n",
+		       data->name, sub_minor);
+		device_destroy(rpad_sys.devclass, devt);
+		return -EBUSY;
+	}
+
+	rp_dev->io_base = ioremap_nocache(rp_dev->sys_addr,
+	                                  RPAD_PL_REGION_SIZE);
+	if (!rp_dev->io_base) {
+		printk(KERN_WARNING "rpad_%s%d: io remap failed\n", data->name,
+		       sub_minor);
+		release_mem_region(rp_dev->sys_addr, RPAD_PL_REGION_SIZE);
+		device_destroy(rpad_sys.devclass, devt);
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+/*
+ * reverse preparations.
+ */
+static void rpad_unprepare_device(struct rpad_device *rp_dev)
+{
+	iounmap(rp_dev->io_base);
+	release_mem_region(rp_dev->sys_addr, RPAD_PL_REGION_SIZE);
+	device_destroy(rpad_sys.devclass, rp_dev->devt);
+}
+
+/*
+ * initialize semaphore and char device. register rpad_device's char device with
+ * the kernel, making it go live.
+ */
+static int rpad_activate_device(struct rpad_device *rp_dev,
+                                unsigned int sub_minor)
 {
 	int ret;
 
-	ret = rpad_setup_device_class();
-	if (ret) {
-		printk(KERN_ALERT "rpad: class setup error\n");
-		return ret;
-	}
-	ret = rpad_setup_device(NULL, MKDEV(rpad_major, rpad_minor));
-	if (ret) {
-		rpad_release_device_class();
-		printk(KERN_ALERT "rpad: device setup error\n");
-		return ret;
-	}
+	sema_init(&rp_dev->sem, 1);
 
-	cdev_init(&dev->cdev, &rpad_fops);
-	dev->cdev.owner = THIS_MODULE;
+	cdev_init(&rp_dev->cdev, rp_dev->data->fops);
+	rp_dev->cdev.owner = THIS_MODULE;
 
-	ret = cdev_add(&dev->cdev, MKDEV(rpad_major, rpad_minor), RPAD_CHANNELS);
+	ret = cdev_add(&rp_dev->cdev, rp_dev->devt, 1);
 	if (ret) {
-		rpad_release_device(MKDEV(rpad_major, rpad_minor));
-		rpad_release_device_class();
-		printk(KERN_WARNING "rpad: can't add char device\n");
+		printk(KERN_WARNING "rpad_%s%d: can't add char device\n",
+		       rp_dev->data->name, sub_minor);
 		return ret;
 	}
 
@@ -336,66 +184,151 @@ static int rpad_device_activate(struct rpad_device *dev)
 }
 
 /*
- * detaches the module's components (device, class, char device) from the kernel
+ * search all supported devices in the RPAD PL regions and install the
+ * appropriate device implementation for each recognized instance.
  */
-static inline void rpad_device_deactivate(struct rpad_device *dev)
+static int rpad_install_devices(void)
 {
-	cdev_del(&dev->cdev);
-	rpad_release_device(MKDEV(rpad_major, rpad_minor));
-	rpad_release_device_class();
+	int region;
+	unsigned int next_minor;
+	struct rpad_device temp_dev;
+	struct rpad_device *rp_dev;
+	enum rpad_devtype sub_type;
+	unsigned int sub_minors[NUM_RPAD_TYPES];
+	int ret;
+
+	rpad_sys.rp_devs =
+		kzalloc(rpad_sys.nr_of_regions * sizeof(struct rpad_device *),
+		        GFP_KERNEL);
+	if (!rpad_sys.rp_devs)
+		return -ENOMEM;
+
+	memset(sub_minors, 0, sizeof(sub_minors));
+	next_minor = minor;
+	for (region = 0; region < rpad_sys.nr_of_regions; region++) {
+		/* hardware interrogation */
+		temp_dev.data = rpad_get_devtype_data(region);
+		if (IS_ERR(temp_dev.data))
+			continue;
+		sub_type = temp_dev.data->type;
+
+		/* device recognized, installation in 4 steps */
+		ret = rpad_prepare_device(&temp_dev, MKDEV(major, next_minor),
+		                          region, sub_minors[sub_type]);
+		if (ret) {
+			printk(KERN_INFO "rpad: skipped device, rc %d\n", ret);
+			continue;
+		}
+
+		rp_dev = temp_dev.data->setup(&temp_dev);
+		if (IS_ERR(rp_dev)) {
+			printk(KERN_INFO "rpad: skipped device, rc %ld\n",
+			       PTR_ERR(rp_dev));
+			rpad_unprepare_device(&temp_dev);
+			continue;
+		}
+
+		ret = rpad_activate_device(rp_dev, sub_minors[sub_type]);
+		if (ret) {
+			printk(KERN_INFO "rpad: skipped device, rc %d\n", ret);
+			rp_dev->data->teardown(rp_dev);
+			rpad_unprepare_device(&temp_dev);
+			continue;
+		}
+
+		rpad_sys.rp_devs[next_minor - minor] = rp_dev;
+		/* TODO we just stored an indirect reference to a device here.
+		 * do we need to get_device, or was that implicit with create in
+		 * rpad_prepare_device() ? how about the cdev ? */
+		sub_minors[sub_type]++;
+		next_minor++;
+	}
+
+	if (next_minor == minor) {
+		kfree(rpad_sys.rp_devs);
+		return -ENXIO; /* not a single device installed */
+	}
+
+	return 0;
+}
+
+/*
+ * uninstall all previously installed device implementations.
+ */
+static void rpad_uninstall_devices(void)
+{
+	int i;
+	struct rpad_device temp_dev;
+	struct rpad_device *rp_dev;
+
+	for (i = 0; i < rpad_sys.nr_of_regions; i++) {
+		if (!(rp_dev = rpad_sys.rp_devs[i]))
+			break;
+		/* TODO see above re put_device etc */
+		cdev_del(&rp_dev->cdev);
+		temp_dev = *rp_dev; /* make a copy, teardown() frees rp_dev */
+		rp_dev->data->teardown(rp_dev);
+		rpad_unprepare_device(&temp_dev);
+	}
+	kfree(rpad_sys.rp_devs);
 }
 
 static int __init rpad_init(void)
 {
 	int ret;
 
-	printk(KERN_ALERT "Module rpad loading\n");
-
-	ret = rpad_device_register(&rpad_dev);
+	ret = rpad_map_sysconfig_io();
 	if (ret)
 		goto error_msg;
 
-	ret = rpad_resources_alloc(&rpad_dev);
-	if (ret)
-		goto error_unreg;
+	if (!rpad_check_sysconfig(&rpad_sys)) {
+		printk(KERN_INFO "rpad: no supported RPAD PL found\n");
+		ret = -ENXIO;
+		goto error_unmap;
+	}
 
-	ret = rpad_device_activate(&rpad_dev);
+	ret = rpad_prepare_architecture();
 	if (ret)
-		goto error_free;
+		goto error_unmap;
 
-	printk(KERN_ALERT "Module rpad loaded\n");
+	ret = rpad_install_devices();
+	if (ret)
+		goto error_unprep;
+
+	printk(KERN_INFO "Module rpad loaded\n");
 
 	return 0;
 
-error_free:
-	rpad_resources_free(&rpad_dev);
-error_unreg:
-	rpad_device_unregister();
+error_unprep:
+	rpad_unprepare_architecture();
+error_unmap:
+	rpad_unmap_sysconfig_io();
 error_msg:
-	printk(KERN_ALERT "Module rpad not loaded\n");
+	printk(KERN_INFO "Module rpad not loaded\n");
 
 	return ret;
 }
 
 static void __exit rpad_exit(void)
 {
-	printk(KERN_ALERT "Module rpad unloading\n");
+	rpad_uninstall_devices();
+	rpad_unprepare_architecture();
+	rpad_unmap_sysconfig_io();
 
-	rpad_device_deactivate(&rpad_dev);
-	rpad_resources_free(&rpad_dev);
-	rpad_device_unregister();
-
-	printk(KERN_ALERT "Module rpad unloaded\n");
+	printk(KERN_INFO "Module rpad unloaded\n");
 }
 
+/*
+ * supported parameters on the insmod command line
+ */
+module_param(major, uint, S_IRUGO);
+module_param(minor, uint, S_IRUGO);
+
+/*
+ * module administration
+ */
 module_init(rpad_init);
 module_exit(rpad_exit);
-
-module_param(rpad_major, uint, S_IRUGO);
-module_param(rpad_minor, uint, S_IRUGO);
-module_param(rpad_minsize, uint, S_IRUGO);
-module_param(rpad_maxsize, uint, S_IRUGO);
-
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Nils Roos");
 MODULE_DESCRIPTION("RedPitaya architecture driver");

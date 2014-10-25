@@ -6,55 +6,83 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/delay.h>
+#include <linux/ioport.h>
 #include <asm/io.h>
 
 #include "rp_pl.h"
 #include "rp_pl_hw.h"
+#include "rp_hk.h"
+#include "rp_scope.h"
+/*#include "rp_asg.h"*/
+/*#include "rp_pid.h"*/
+/*#include "rp_ams.h"*/
+/*#include "rp_daisy.h"*/
+
+/* sysconfig registers */
+#define SYS_id		0x00000000UL
+#define SYS_regions	0x00000004UL
 
 /*
- * FIXME
- * this is just a one shot test hack. will be replaced soonest with enumeration
- * of the pl resources and device specific driver function.
+ * this is the anchor for the recognized functional blocks. if your block
+ * presents one of the defined enum rpad_devtype values as type in its SYS_ID
+ * register, this table will be consulted to fetch a set of functions of your
+ * choosing to handle the device, along with some other data.
  */
-void test_hardware(struct rpad_device *dev)
+static struct rpad_devtype_data *rpad_devtype_table[NUM_RPAD_TYPES] = {
+	[RPAD_HK_TYPE]		= &rpad_hk_data,
+	[RPAD_SCOPE_TYPE]	= &rpad_scope_data,
+	/* add pointer to your struct rpad_devtype_data at the appropriate
+	 * enum const slot here. you did define a new enum, didn't you ? */
+};
+
+/*
+ * check if the PL can be identified as a supported RPAD configuration.
+ * can be called after sysconfig IO region is mapped.
+ */
+int rpad_check_sysconfig(struct rpad_sysconfig *sys)
 {
-	unsigned int test_a, test_b;
+	sys->id            = ioread32(rp_sysa(sys, SYS_id));
+	sys->nr_of_regions = ioread32(rp_sysa(sys, SYS_regions));
+	/* TODO perhaps also use some checksum or magic nr */
 
-	test_a = ioread32(rp_scope(dev, RPAD_SYS_ID));
-	printk(KERN_ALERT "rpad: ID %x\n", test_a);
+	if (RPAD_TYPE(sys->id) != RPAD_SYS_TYPE ||
+	    sys->nr_of_regions <= 0 || sys->nr_of_regions > 1023)
+		return 0; /* apparently not RPAD PL */
 
-	iowrite32(0x00000002, rp_scope(dev, SCOPE_ctrl)); // reset
-	iowrite32(8, rp_scope(dev, SCOPE_dec));
-	iowrite32(1, rp_scope(dev, SCOPE_avg_en));
+	if (RPAD_VERSION(sys->id) != 1)
+		return 0; /* not a supported version */
 
-	iowrite32(dev->buffer_phys_addr,
-	          rp_scope(dev, SCOPE_ddr_a_base));
-	iowrite32(dev->buffer_phys_addr + dev->buffer_size / 2,
-	          rp_scope(dev, SCOPE_ddr_a_end));
-	iowrite32(dev->buffer_phys_addr + dev->buffer_size / 2,
-	          rp_scope(dev, SCOPE_ddr_b_base));
-	iowrite32(dev->buffer_phys_addr + dev->buffer_size,
-	          rp_scope(dev, SCOPE_ddr_b_end));
-	iowrite32(0x0000000c, rp_scope(dev, SCOPE_ddr_control)); // reload A/B
-	udelay(5);
+	return 1;
+}
 
-	test_a = ioread32(rp_scope(dev, SCOPE_ddr_a_base));
-	test_b = ioread32(rp_scope(dev, SCOPE_ddr_a_end));
-	printk(KERN_ALERT "rpad: A %p - %p\n", (void *)test_a, (void *)test_b);
-	test_a = ioread32(rp_scope(dev, SCOPE_ddr_b_base));
-	test_b = ioread32(rp_scope(dev, SCOPE_ddr_b_end));
-	printk(KERN_ALERT "rpad: B %p - %p\n", (void *)test_a, (void *)test_b);
+/*
+ * access the region's SYS_ID register and look up and return the type's data in
+ * rpad_devtype_table. this fails if the io memory region cannot be mapped or if
+ * the SYS_ID contains an invalid type.
+ */
+struct rpad_devtype_data *rpad_get_devtype_data(int region_nr)
+{
+	resource_size_t start = RPAD_PL_BASE + region_nr * RPAD_PL_REGION_SIZE;
+	void __iomem *base;
+	unsigned int type;
 
-	iowrite32(0x00000003, rp_scope(dev, SCOPE_ddr_control)); // enable A/B
-	iowrite32(0x00000001, rp_scope(dev, SCOPE_ctrl)); // arm
+	if (!request_mem_region(start, RPAD_PL_REGION_SIZE, "rpad_sysconfig"))
+		return ERR_PTR(-EBUSY);
 
-	test_b = dev->buffer_phys_addr + dev->buffer_size / 2 - 0x00004000;
-	do {
-		test_a = ioread32(rp_scope(dev, SCOPE_ddr_a_curr));
-	} while (test_a < test_b);
+	base = ioremap_nocache(start, RPAD_PL_REGION_SIZE);
+	if (!base) {
+		release_mem_region(start, RPAD_PL_REGION_SIZE);
+		return ERR_PTR(-EBUSY);
+	}
 
-	iowrite32(0x00000002, rp_scope(dev, SCOPE_ctrl)); // reset
-	iowrite32(0x00000000, rp_scope(dev, SCOPE_ddr_control));
-	printk(KERN_ALERT "rpad: acquisition complete\n");
+	type = RPAD_TYPE(ioread32(base + RPAD_SYS_ID));
+
+	iounmap(base);
+	release_mem_region(start, RPAD_PL_REGION_SIZE);
+
+	if (type == RPAD_NO_TYPE || type >= NUM_RPAD_TYPES ||
+	    !rpad_devtype_table[type])
+		return ERR_PTR(-ENXIO);
+
+	return rpad_devtype_table[type];
 }

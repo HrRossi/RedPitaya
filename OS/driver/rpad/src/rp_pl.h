@@ -8,44 +8,52 @@
 #ifndef RP_PL_H_
 #define RP_PL_H_
 
-#include <linux/cdev.h>
+#include <linux/ioport.h>
 #include <linux/semaphore.h>
+#include <linux/device.h>
+#include <linux/cdev.h>
 #include <asm/io.h>
 
 /*
- * the device structure is very much preliminary and guaranteed to change
- * substantially in order to accommodate enumerated subdevices etc. soonish
- *
- * sem                  access control
- * hw_init_done         initialited flag
- * buffer_addr          virtual address of DDR buffer
- * buffer_size          size of DDR buffer
- * buffer_phys_addr     physical address DDR buffer
- * crp                  current read position (virtual address)
- * buffer_end           last position of buffer (virtual address)
- * text_page            one page to prepare human readable output in
- * read_index           read offset into the text_page
- * max_index            end offset of prepared data in text_page
- * scope                resource pointer for our io allotment
- * scope_base           io cookie to use with ioread/iowrite/...
- * cdev                 character device anchor
+ * root structure of the RPAD module
+ * id			id value read from the PL
+ * nr_of_regions	number of system bus regions supported by the PL
+ * sys_res		resource pointer for our io allotment
+ * sys_base		io cookie to use with ioread/iowrite/...
+ * sem			access control
  */
-struct rpad_device {
-	struct semaphore sem;
-	int hw_init_done;
-	unsigned long buffer_addr;
-	unsigned int buffer_size;
-	unsigned long buffer_phys_addr;
-	unsigned long crp;
-	unsigned long buffer_end;
-	char *text_page;
-	int read_index;
-	int max_index;
-	struct resource *scope;
-	void __iomem *scope_base;
-	struct cdev cdev;
+struct rpad_sysconfig {
+	u32			id;
+	int			nr_of_regions;
+	struct rpad_device	**rp_devs; /* TODO use a list ? */
+
+	struct class		*devclass;
+	void __iomem		*sys_base;
 };
 
-#define rp_scope(dev,u) ((void __iomem *)((dev)->scope_base + (u)))
+#define rp_sysa(sysconf,u)	((void __iomem *)((sysconf)->sys_base + (u)))
+
+/*
+ * this device structure is very much preliminary and guaranteed to change
+ * substantially in order to accommodate enumerated subdevices etc. soonish
+ *
+ * sys_addr		physical address of the sys region
+ * io_base		io cookie to use with ioread/iowrite/...
+ * devt			this instance's device number pair
+ * sem			access control
+ * dev			device pointer
+ * cdev			character device anchor
+ */
+struct rpad_device {
+	resource_size_t 		sys_addr;
+	void __iomem			*io_base;
+	dev_t				devt;
+	struct rpad_devtype_data	*data;
+	struct semaphore		sem;
+	struct device			*dev;
+	struct cdev			cdev;
+};
+
+#define rp_addr(rpdev,u)	((void __iomem *)((rpdev)->rp_dev.io_base + (u)))
 
 #endif /* RP_PL_H_ */
