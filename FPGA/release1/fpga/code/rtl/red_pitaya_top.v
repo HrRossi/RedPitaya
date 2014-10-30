@@ -141,9 +141,10 @@ module red_pitaya_top
 );
 
 localparam SYSCONF_ID      = 32'hfff00001; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
-localparam SYSCONF_REGIONS = 32'd8; // number of regions supported by the sysbus
+localparam SYSCONF_REGIONS = 8; // number of regions supported by the sysbus
+localparam FIRST_FREE      = 6; // index of first region not mapped to a functional block
 localparam SYSR = SYSCONF_REGIONS;
-genvar CNT,CNT1;
+genvar GV,CNT;
 
 
 //---------------------------------------------------------------------------------
@@ -166,18 +167,32 @@ wire             ps_sys_ack         ;
 
 // ADC buffer
 wire [   2-1:0] adcbuf_select;  // channel buffer select
-wire [   4-1:0] adcbuf_ready;   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
-wire [  12-1:0] adcbuf_raddr;   // buffer read address
+wire [   4-1:0] adcbuf_ready;   // buffer ready [0]: ChA 0-1k, [1]: ChA 1k-2k, [2]: ChB 0-1k, [3]: ChB 1k-2k
+wire [   9-1:0] adcbuf_raddr;   // buffer read address
 wire [  64-1:0] adcbuf_rdata;   // buffer read data
 
 // DDR Dump parameters
-wire [  32-1:0] ddr_a_base;     // DDR ChA buffer base address
-wire [  32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
-wire [  32-1:0] ddr_a_curr;     // DDR ChA current write address
-wire [  32-1:0] ddr_b_base;     // DDR ChB buffer base address
-wire [  32-1:0] ddr_b_end;      // DDR ChB buffer end address + 1
-wire [  32-1:0] ddr_b_curr;     // DDR ChB current write address
-wire [   4-1:0] ddr_control;    // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+wire [  32-1:0] ddrd_a_base;    // DDR Dump ChA buffer base address
+wire [  32-1:0] ddrd_a_end;     // DDR Dump ChA buffer end address + 1
+wire [  32-1:0] ddrd_a_curr;    // DDR Dump ChA current write address
+wire [  32-1:0] ddrd_b_base;    // DDR Dump ChB buffer base address
+wire [  32-1:0] ddrd_b_end;     // DDR Dump ChB buffer end address + 1
+wire [  32-1:0] ddrd_b_curr;    // DDR Dump ChB current write address
+wire [   4-1:0] ddrd_control;   // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+
+// DAC buffer
+wire [   2-1:0] dacbuf_select;  // channel buffer select
+wire [   4-1:0] dacbuf_ready;   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+wire [  12-1:0] dacbuf_waddr;   // buffer write address
+wire [  64-1:0] dacbuf_wdata;   // buffer write data
+wire            dacbuf_valid;   // buffer data valid
+
+// DDR Slurp parameters
+wire [  32-1:0] ddrs_a_base;    // DDR Slurp ChA buffer base address
+wire [  32-1:0] ddrs_a_end;     // DDR Slurp ChA buffer end address + 1
+wire [  32-1:0] ddrs_b_base;    // DDR Slurp ChB buffer base address
+wire [  32-1:0] ddrs_b_end;     // DDR Slurp ChB buffer end address + 1
+wire [   4-1:0] ddrs_control;   // DDR Slurp control
 
 //---------------------------------------------------------------------------------
 //
@@ -202,7 +217,7 @@ reg             sysconf_ack;
 reg             sysconf_cs;
 
 always @(sys_addr) begin
-    sys_cs     = 8'h00;
+    sys_cs = {SYSR{1'b0}};
     if (sys_addr[29:20] < SYSCONF_REGIONS) begin
         sys_cs[sys_addr[29:20]] = 1'b1;
     end
@@ -215,24 +230,23 @@ end
 assign sys_wen = sys_cs & {SYSR{ps_sys_wen}}  ;
 assign sys_ren = sys_cs & {SYSR{ps_sys_ren}}  ;
 
-// multiplex outputs of the sysregion blocks onto PS sysbus by cs plus sysconf
-// arbitrary (but in this case fixed to 32) width by arbitrary number of channels bus multiplexer
-wire [SYSR*32-1:0] sys_rdata_s;
-generate for (CNT=0; CNT<32; CNT=CNT+1) begin
-    for (CNT1=0; CNT1<SYSR; CNT1=CNT1+1) begin
-        assign sys_rdata_s[CNT*SYSR+CNT1] = sys_rdata[CNT1*32+CNT]; // reshuffle to align with sys_cs per bitline
-    end
-    assign ps_sys_rdata[CNT] = |(sys_cs & sys_rdata_s[CNT*SYSR+:SYSR]) | sysconf_cs & sysconf_rdata[CNT];
-end endgenerate
-
+// multiplex outputs of the sysregion blocks onto PS sysbus by cs (plus sysconf_cs)
 assign ps_sys_err = |(sys_cs & sys_err) | sysconf_cs & sysconf_err;
 assign ps_sys_ack = |(sys_cs & sys_ack) | sysconf_cs & sysconf_ack;
+// arbitrary (but in this case fixed to 32) width by arbitrary number of channels bus multiplexer
+wire [SYSR*32-1:0] sys_rdata_s;
+generate for (GV=0; GV<32; GV=GV+1) begin
+    for (CNT=0; CNT<SYSR; CNT=CNT+1) begin
+        assign sys_rdata_s[GV*SYSR+CNT] = sys_rdata[CNT*32+GV]; // reshuffle to align with sys_cs per bitline
+    end
+    assign ps_sys_rdata[GV] = |(sys_cs & sys_rdata_s[GV*SYSR+:SYSR]) | sysconf_cs & sysconf_rdata[GV];
+end endgenerate
 
 // generate sane signals for unused regions
-generate for (CNT=6; CNT<SYSR; CNT=CNT+1) begin
-assign sys_rdata[CNT*32+:32] = 32'h0;
-assign sys_err[CNT] = 1'b0;
-assign sys_ack[CNT] = 1'b1;
+generate for (GV=FIRST_FREE; GV<SYSR; GV=GV+1) begin
+assign sys_rdata[GV*32+:32] = 32'h0;
+assign sys_err[GV] = 1'b0;
+assign sys_ack[GV] = 1'b1;
 end endgenerate
 
 // the sysbus now has some static configuration values that will be queried by the rpad driver
@@ -308,13 +322,27 @@ red_pitaya_ps i_ps
     .adcbuf_rdata_i     (adcbuf_rdata           ),  //
 
     // DDR Dump parameter export
-    .ddr_a_base_i   (ddr_a_base                 ),  // DDR ChA buffer base address
-    .ddr_a_end_i    (ddr_a_end                  ),  // DDR ChA buffer end address + 1
-    .ddr_a_curr_o   (ddr_a_curr                 ),  // DDR ChA current write address
-    .ddr_b_base_i   (ddr_b_base                 ),  // DDR ChB buffer base address
-    .ddr_b_end_i    (ddr_b_end                  ),  // DDR ChB buffer end address + 1
-    .ddr_b_curr_o   (ddr_b_curr                 ),  // DDR ChB current write address
-    .ddr_control_i  (ddr_control                )   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+    .ddrd_a_base_i  (ddrd_a_base                ),  // DDR Dump ChA buffer base address
+    .ddrd_a_end_i   (ddrd_a_end                 ),  // DDR Dump ChA buffer end address + 1
+    .ddrd_a_curr_o  (ddrd_a_curr                ),  // DDR Dump ChA current write address
+    .ddrd_b_base_i  (ddrd_b_base                ),  // DDR Dump ChB buffer base address
+    .ddrd_b_end_i   (ddrd_b_end                 ),  // DDR Dump ChB buffer end address + 1
+    .ddrd_b_curr_o  (ddrd_b_curr                ),  // DDR Dump ChB current write address
+    .ddrd_control_i (ddrd_control               ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+
+    // DAC data buffer
+    .dacbuf_select_o    (dacbuf_select          ),  // buffer select ChA [0] / ChB [1]
+    .dacbuf_ready_i     (dacbuf_ready           ),  // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    .dacbuf_waddr_o     (dacbuf_waddr           ),  //
+    .dacbuf_wdata_o     (dacbuf_wdata           ),  //
+    .dacbuf_valid_o     (dacbuf_valid           ),  //
+
+    // DDR Slurp parameter export
+    .ddrs_a_base_i  (ddrs_a_base                ),  // DDR Slurp ChA buffer base address
+    .ddrs_a_end_i   (ddrs_a_end                 ),  // DDR Slurp ChA buffer end address + 1
+    .ddrs_b_base_i  (ddrs_b_base                ),  // DDR Slurp ChB buffer base address
+    .ddrs_b_end_i   (ddrs_b_end                 ),  // DDR Slurp ChB buffer end address + 1
+    .ddrs_control_i (ddrs_control               )   // DDR Slurp control
 );
 
 
@@ -431,8 +459,6 @@ red_pitaya_hk i_hk
 
 
 
-genvar GV ;
-
 generate
 for( GV = 0 ; GV < 8 ; GV = GV + 1)
 begin : exp_iobuf
@@ -474,13 +500,13 @@ red_pitaya_scope i_scope
   .sys_ack_o       (  sys_ack[1]                 ),  // acknowledge signal
 
     // DDR Dump parameter export
-    .ddr_a_base_o       (ddr_a_base         ),  // DDR ChA buffer base address
-    .ddr_a_end_o        (ddr_a_end          ),  // DDR ChA buffer end address + 1
-    .ddr_a_curr_i       (ddr_a_curr         ),  // DDR ChA current write address
-    .ddr_b_base_o       (ddr_b_base         ),  // DDR ChB buffer base address
-    .ddr_b_end_o        (ddr_b_end          ),  // DDR ChB buffer end address + 1
-    .ddr_b_curr_i       (ddr_b_curr         ),  // DDR ChB current write address
-    .ddr_control_o      (ddr_control        ),  // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+    .ddr_a_base_o       (ddrd_a_base        ),  // DDR Dump ChA buffer base address
+    .ddr_a_end_o        (ddrd_a_end         ),  // DDR Dump ChA buffer end address + 1
+    .ddr_a_curr_i       (ddrd_a_curr        ),  // DDR Dump ChA current write address
+    .ddr_b_base_o       (ddrd_b_base        ),  // DDR Dump ChB buffer base address
+    .ddr_b_end_o        (ddrd_b_end         ),  // DDR Dump ChB buffer end address + 1
+    .ddr_b_curr_i       (ddrd_b_curr        ),  // DDR Dump ChB current write address
+    .ddr_control_o      (ddrd_control       ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
 
     // ADC data buffer
     .adcbuf_clk_i       (fclk[0]            ),  // clock
@@ -523,7 +549,23 @@ red_pitaya_asg i_asg
   .sys_ren_i       (  sys_ren[2]                 ),  // read enable
   .sys_rdata_o     (  sys_rdata[ 2*32+31: 2*32]  ),  // read data
   .sys_err_o       (  sys_err[2]                 ),  // error indicator
-  .sys_ack_o       (  sys_ack[2]                 )   // acknowledge signal
+  .sys_ack_o       (  sys_ack[2]                 ),  // acknowledge signal
+
+    // DDR Slurp parameter export
+    .ddr_a_base_o       (ddrs_a_base        ),  // DDR Slurp ChA buffer base address
+    .ddr_a_end_o        (ddrs_a_end         ),  // DDR Slurp ChA buffer end address + 1
+    .ddr_b_base_o       (ddrs_b_base        ),  // DDR Slurp ChB buffer base address
+    .ddr_b_end_o        (ddrs_b_end         ),  // DDR Slurp ChB buffer end address + 1
+    .ddr_control_o      (ddrs_control       ),  // DDR Slurp control
+
+    // DAC data buffer
+    .dacbuf_clk_i       (fclk[0]            ),  // clock
+    .dacbuf_rstn_i      (frstn[0]           ),  // reset
+    .dacbuf_select_i    (dacbuf_select      ),  // channel buffer select
+    .dacbuf_ready_o     (dacbuf_ready       ),  // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    .dacbuf_waddr_i     (dacbuf_waddr       ),  // buffer write address
+    .dacbuf_wdata_i     (dacbuf_wdata       ),  // buffer write data
+    .dacbuf_valid_i     (dacbuf_valid       )   // buffer data valid
 );
 
 

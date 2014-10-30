@@ -54,12 +54,6 @@ module red_pitaya_asg_ch
    input      [  3-1: 0] trig_src_i      ,  //!< trigger source selector
    output                trig_done_o     ,  //!< trigger event
 
-   // buffer ctrl
-   input                 buf_we_i        ,  //!< buffer write enable
-   input      [ 14-1: 0] buf_addr_i      ,  //!< buffer address
-   input      [ 14-1: 0] buf_wdata_i     ,  //!< buffer write data
-   output reg [ 14-1: 0] buf_rdata_o     ,  //!< buffer read data
-
    // configuration
    input     [RSZ+15: 0] set_size_i      ,  //!< set table data size
    input     [RSZ+15: 0] set_step_i      ,  //!< set pointer step
@@ -69,8 +63,16 @@ module red_pitaya_asg_ch
    input                 set_wrap_i      ,  //!< set wrap enable
    input     [  14-1: 0] set_amp_i       ,  //!< set amplitude scale
    input     [  14-1: 0] set_dc_i        ,  //!< set output offset
-   input                 set_zero_i         //!< set output to zero
+   input                 set_zero_i      ,  //!< set output to zero
 
+    // DAC data buffer
+    input               dacbuf_clk_i    ,   // clock
+    input               dacbuf_rstn_i   ,   // reset
+    input               dacbuf_select_i ,   // channel buffer select
+    output  [    2-1:0] dacbuf_ready_o  ,   // buffer ready [0]: 0k-8k, [1]: 8k-16k
+    input   [   12-1:0] dacbuf_waddr_i  ,   // buffer write address
+    input   [   64-1:0] dacbuf_wdata_i  ,   // buffer write data
+    input               dacbuf_valid_i      // buffer data valid
 );
 
 
@@ -79,35 +81,27 @@ module red_pitaya_asg_ch
 //
 //  DAC buffer RAM
 
-reg   [  14-1: 0] dac_buf [0:(1<<RSZ)-1] ;
-reg   [  14-1: 0] dac_rd    ;
-reg   [  14-1: 0] dac_rdat  ;
-reg   [ RSZ-1: 0] dac_rp    ;
+wire  [  14-1: 0] dac_rdat  ;
 reg   [RSZ+15: 0] dac_pnt   ; // read pointer
+
+dac_buffer i_dac_buffer (
+    .clka   (dacbuf_clk_i       ),
+    .ena    (dacbuf_select_i    ),
+    .wea    (dacbuf_valid_i     ),
+    .addra  (dacbuf_waddr_i     ),
+    .dina   (dacbuf_wdata_i     ),
+    .clkb   (dac_clk_i          ),
+    .rstb   (!dac_rstn_i        ),
+    .enb    (1'b1 /* todo ? */  ), // the DAC is always ready, isn't it ?
+    .addrb  (dac_pnt[16+:RSZ]   ),
+    .doutb  ({2'b00,dac_rdat}   )
+);
 
 reg               dac_do    ;
 reg               dac_trig  ;
 wire  [RSZ+16: 0] dac_npnt  ; // next read pointer
 reg   [  28-1: 0] dac_mult  ;
 reg   [  15-1: 0] dac_sum   ;
-
-// read
-always @(posedge dac_clk_i) begin
-   dac_rp   <= dac_pnt[RSZ+15:16];
-   dac_rd   <= dac_buf[dac_rp] ;
-   dac_rdat <= dac_rd ;  // improve timing
-end
-
-// write
-always @(posedge dac_clk_i) begin
-   if (buf_we_i)
-      dac_buf[buf_addr_i] <= buf_wdata_i[14-1:0] ;
-end
-
-// read-back
-always @(posedge dac_clk_i) begin
-   buf_rdata_o <= dac_buf[buf_addr_i] ;
-end
 
 
 // scale and offset
