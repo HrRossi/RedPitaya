@@ -104,18 +104,32 @@ module red_pitaya_ps
 
     // ADC data buffer
     output [   1:0] adcbuf_select_o ,
-    input  [ 4-1:0] adcbuf_ready_i  ,   // [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
-    output [12-1:0] adcbuf_raddr_o  ,
+    input  [ 4-1:0] adcbuf_ready_i  ,   // [0]: ChA 0-1k, [1]: ChA 1k-2k, [2]: ChB 0-1k, [3]: ChB 1k-2k
+    output [ 9-1:0] adcbuf_raddr_o  ,
     input  [64-1:0] adcbuf_rdata_i  ,
 
-    // parameter export
-    input   [   32-1:0] ddr_a_base_i,   // DDR ChA buffer base address
-    input   [   32-1:0] ddr_a_end_i ,   // DDR ChA buffer end address + 1
-    output  [   32-1:0] ddr_a_curr_o,   // DDR ChA current write address
-    input   [   32-1:0] ddr_b_base_i,   // DDR ChB buffer base address
-    input   [   32-1:0] ddr_b_end_i ,   // DDR ChB buffer end address + 1
-    output  [   32-1:0] ddr_b_curr_o,   // DDR ChB current write address
-    input   [    4-1:0] ddr_control_i   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+    // DDR Dump parameter export
+    input   [   32-1:0] ddrd_a_base_i , // DDR Dump ChA buffer base address
+    input   [   32-1:0] ddrd_a_end_i  , // DDR Dump ChA buffer end address + 1
+    output  [   32-1:0] ddrd_a_curr_o , // DDR Dump ChA current write address
+    input   [   32-1:0] ddrd_b_base_i , // DDR Dump ChB buffer base address
+    input   [   32-1:0] ddrd_b_end_i  , // DDR Dump ChB buffer end address + 1
+    output  [   32-1:0] ddrd_b_curr_o , // DDR Dump ChB current write address
+    input   [    4-1:0] ddrd_control_i, // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+
+    // DAC data buffer
+    output [   1:0] dacbuf_select_o ,   //
+    input  [ 4-1:0] dacbuf_ready_i  ,   // [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    output [12-1:0] dacbuf_waddr_o  ,   //
+    output [64-1:0] dacbuf_wdata_o  ,   //
+    output          dacbuf_valid_o  ,   //
+
+    // DDR Slurp parameter export
+    input   [   32-1:0] ddrs_a_base_i , // DDR Slurp ChA buffer base address
+    input   [   32-1:0] ddrs_a_end_i  , // DDR Slurp ChA buffer end address + 1
+    input   [   32-1:0] ddrs_b_base_i , // DDR Slurp ChB buffer base address
+    input   [   32-1:0] ddrs_b_end_i  , // DDR Slurp ChB buffer end address + 1
+    input   [    4-1:0] ddrs_control_i  // DDR Slurp control
 );
 
 
@@ -305,7 +319,7 @@ system_wrapper system_i
   .SPI0_MOSI_T        (                              ),  // out
   .SPI0_MISO_T        (                              ),  // out
 
-// HP0
+    // HP0
     .S_AXI_HP0_araddr   (hp0_saxi_araddr    ),
     .S_AXI_HP0_arburst  (hp0_saxi_arburst   ),
     .S_AXI_HP0_arcache  (hp0_saxi_arcache   ),
@@ -439,7 +453,8 @@ axi_dump2ddr_master #(
     .AXI_DW     (  64     ), // data width (8,16,...,1024)
     .AXI_AW     (  32     ), // AXI address width
     .AXI_IW     (   6     ), // AXI ID width
-    .BUF_AW     (  12     ), // buffer address width
+    .DBF_AW     (   9     ), // Dump buffer address width
+    .SBF_AW     (  12     ), // Slurp buffer address width
     .BUF_CH     (   2     )  // number of buffered channels
 ) i_hp0_master  (
     .axi_araddr_o   (hp0_saxi_araddr    ),
@@ -481,21 +496,38 @@ axi_dump2ddr_master #(
     .axi_wstrb_o    (hp0_saxi_wstrb     ),
     .axi_wvalid_o   (hp0_saxi_wvalid    ),
 
+    // ADC/DAC clock / reset
     .buf_clk_i      (hp0_saxi_aclk      ),  //
     .buf_rstn_i     (hp0_saxi_arstn     ),  //
-    .buf_select_o   (adcbuf_select_o    ),  //
-    .buf_ready_i    (adcbuf_ready_i     ),  //
-    .buf_raddr_o    (adcbuf_raddr_o     ),  //
-    .buf_rdata_i    (adcbuf_rdata_i     ),  //
 
-    // parameter export
-    .ddr_a_base_i   (ddr_a_base_i       ),
-    .ddr_a_end_i    (ddr_a_end_i        ),
-    .ddr_a_curr_o   (ddr_a_curr_o       ),
-    .ddr_b_base_i   (ddr_b_base_i       ),
-    .ddr_b_end_i    (ddr_b_end_i        ),
-    .ddr_b_curr_o   (ddr_b_curr_o       ),
-    .ddr_control_i  (ddr_control_i      )
+    // ADC buffer interface
+    .dbuf_select_o  (adcbuf_select_o    ),  //
+    .dbuf_ready_i   (adcbuf_ready_i     ),  //
+    .dbuf_raddr_o   (adcbuf_raddr_o     ),  //
+    .dbuf_rdata_i   (adcbuf_rdata_i     ),  //
+
+    // DDR Dump parameter export
+    .ddrd_a_base_i  (ddrd_a_base_i      ),
+    .ddrd_a_end_i   (ddrd_a_end_i       ),
+    .ddrd_a_curr_o  (ddrd_a_curr_o      ),
+    .ddrd_b_base_i  (ddrd_b_base_i      ),
+    .ddrd_b_end_i   (ddrd_b_end_i       ),
+    .ddrd_b_curr_o  (ddrd_b_curr_o      ),
+    .ddrd_control_i (ddrd_control_i     ),
+
+    // DAC buffer interface
+    .sbuf_select_o  (dacbuf_select_o    ),  //
+    .sbuf_ready_i   (dacbuf_ready_i     ),  //
+    .sbuf_waddr_o   (dacbuf_waddr_o     ),  //
+    .sbuf_wdata_o   (dacbuf_wdata_o     ),  //
+    .sbuf_valid_o   (dacbuf_valid_o     ),  //
+
+    // DDR Slurp parameter export
+    .ddrs_a_base_i  (ddrs_a_base_i      ),
+    .ddrs_a_end_i   (ddrs_a_end_i       ),
+    .ddrs_b_base_i  (ddrs_b_base_i      ),
+    .ddrs_b_end_i   (ddrs_b_end_i       ),
+    .ddrs_control_i (ddrs_control_i     )
 );
 
 
