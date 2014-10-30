@@ -8,9 +8,9 @@
 #ifndef RP_PL_HW_H_
 #define RP_PL_HW_H_
 
-#include "linux/fs.h"
+#include <linux/fs.h>
+
 #include "rp_pl.h"
-#include "rp_pl_dev.h"
 
 #define RPAD_VERSIONBITS	20
 #define RPAD_VERSIONMASK	((1U << RPAD_VERSIONBITS) - 1)
@@ -36,23 +36,35 @@
  * RPAD_SYS_ID register of each PL logic block
  */
 enum rpad_devtype {
-	RPAD_NO_TYPE = 0,	/* when logic supplies no value, regs read 0 */
-	RPAD_HK_TYPE,		/* 1 */
-	RPAD_SCOPE_TYPE,	/* 2 */
-	RPAD_ASG_TYPE,		/* 3 */
-	RPAD_PID_TYPE,		/* 4 */
-	RPAD_AMS_TYPE,		/* 5 */
-	RPAD_DAISY_TYPE,	/* 6 */
+	RPAD_NO_TYPE = 0,	/* when logic supplies no value, io reads 0 */
+	RPAD_HK_TYPE,		/* 0x001 */
+	RPAD_SCOPE_TYPE,	/* 0x002 */
+	RPAD_ASG_TYPE,		/* 0x003 */
+	RPAD_PID_TYPE,		/* 0x004 */
+	RPAD_AMS_TYPE,		/* 0x005 */
+	RPAD_DAISY_TYPE,	/* 0x006 */
 	/* insert types for new logic blocks below, append ONLY */
 
 	NUM_RPAD_TYPES,		/* new types only above this line */
 	RPAD_SYS_TYPE = 0xfff
 };
 
+/*
+ * device specific data relevant to architecture management
+ * type		type of device this data is applicable to
+ * setup	device initialisation function. needs at least to allocate its
+ * 		device struct, copy the contents of dev_temp into it and return
+ * 		a pointer to it. must not retain a reference to dev_temp.
+ * teardown	device shutdown function. needs at least to reverse the device
+ * 		struct allocation.
+ * fops		file operations supported by the device
+ * private	private data
+ * name		component name, like "scope". full name would be "rpad_scope%d"
+ */
 struct rpad_devtype_data {
 	const enum rpad_devtype	type;
-	struct rpad_device	*(*setup)(const struct rpad_device *);
-	void			(*teardown)(struct rpad_device *);
+	struct rpad_device	*(*setup)(const struct rpad_device *dev_temp);
+	void			(*teardown)(struct rpad_device *rp_dev);
 	struct file_operations	*fops;
 	void			*private;
 	char			*name;

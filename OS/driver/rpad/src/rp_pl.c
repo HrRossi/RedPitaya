@@ -14,7 +14,6 @@
 #include <linux/fs.h>
 
 #include "rp_pl_hw.h"
-#include "rp_pl_dev.h"
 #include "rp_pl.h"
 
 static unsigned int		major = 0;
@@ -107,7 +106,7 @@ static inline void rpad_unprepare_architecture(void)
  * only things that can legally be copied into the final subtype structure later
  * are prepared here:
  * - device number
- * - device
+ * - pointer to device
  * - io mapping
  */
 static int rpad_prepare_device(struct rpad_device *rp_dev,
@@ -273,6 +272,9 @@ static void rpad_uninstall_devices(void)
 	kfree(rpad_sys.rp_devs);
 }
 
+/*
+ * initialize module resources, scan for devices
+ */
 static int __init rpad_init(void)
 {
 	int ret;
@@ -309,6 +311,9 @@ error_msg:
 	return ret;
 }
 
+/*
+ * release all module resources
+ */
 static void __exit rpad_exit(void)
 {
 	rpad_uninstall_devices();

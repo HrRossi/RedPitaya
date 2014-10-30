@@ -34,12 +34,11 @@ struct rpad_sysconfig {
 #define rp_sysa(sysconf,u)	((void __iomem *)((sysconf)->sys_base + (u)))
 
 /*
- * this device structure is very much preliminary and guaranteed to change
- * substantially in order to accommodate enumerated subdevices etc. soonish
- *
+ * common device attributes of all RedPitaya architecture devices
  * sys_addr		physical address of the sys region
  * io_base		io cookie to use with ioread/iowrite/...
  * devt			this instance's device number pair
+ * data			device specific architecture management data
  * sem			access control
  * dev			device pointer
  * cdev			character device anchor

@@ -31,8 +31,12 @@
 static struct rpad_devtype_data *rpad_devtype_table[NUM_RPAD_TYPES] = {
 	[RPAD_HK_TYPE]		= &rpad_hk_data,
 	[RPAD_SCOPE_TYPE]	= &rpad_scope_data,
+	/*[RPAD_ASG_TYPE]		= &rpad_asg_data,*/
+	/*[RPAD_PID_TYPE]		= &rpad_pid_data,*/
+	/*[RPAD_AMS_TYPE]		= &rpad_ams_data,*/
+	/*[RPAD_DAISY_TYPE]	= &rpad_daisy_data,*/
 	/* add pointer to your struct rpad_devtype_data at the appropriate
-	 * enum const slot here. you did define a new enum, didn't you ? */
+	 * enum const slot here. not using enum is discouraged. */
 };
 
 /*

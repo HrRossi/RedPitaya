@@ -14,18 +14,16 @@
 /*
  * rp_dev		embedded rpad_device
  * hw_init_done		...
+ * resched		timeout to schedule for awaiting new data
  * buffer_addr		virtual address of DDR buffer
  * buffer_size		size of DDR buffer
  * buffer_phys_addr	physical address DDR buffer
- * crp			current read position (virtual address)
- * buffer_end		last position of buffer (virtual address)
- * text_page		one page to prepare human readable output in
- * read_index		read offset into the text_page
- * max_index		end offset of prepared data in text_page
+ * ...
  */
 struct rpad_scope {
 	struct rpad_device	rp_dev;
 	int			hw_init_done;
+	signed long		resched;
 	unsigned long		buffer_addr;
 	unsigned int		buffer_size;
 	unsigned long		buffer_phys_addr;

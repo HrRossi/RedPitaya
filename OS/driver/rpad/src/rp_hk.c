@@ -36,7 +36,7 @@ static struct rpad_device *rpad_setup_hk(const struct rpad_device *dev_temp)
 
 	hk = kzalloc(sizeof(struct rpad_hk), GFP_KERNEL);
 	if (!hk)
-		return ERR_PTR(ENOMEM);
+		return ERR_PTR(-ENOMEM);
 
 	hk->rp_dev = *dev_temp;
 
@@ -52,8 +52,38 @@ static void rpad_teardown_hk(struct rpad_device *rp_dev)
 	kfree(hk);
 }
 
+static const struct vm_operations_struct rpad_hk_mmap_mem_ops = {
+};
+
+/*
+ * create mapping for IO range of housekeeping, derived from dev/mem code
+ */
+static int rpad_hk_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+	struct rpad_hk *scope = (struct rpad_hk *)filp->private_data;
+	size_t size = vma->vm_end - vma->vm_start;
+	resource_size_t addr = vma->vm_pgoff << PAGE_SHIFT;
+
+	if (addr        < scope->rp_dev.sys_addr ||
+	    addr + size > scope->rp_dev.sys_addr + RPAD_PL_REGION_SIZE)
+		return -EINVAL;
+
+	vma->vm_page_prot = phys_mem_access_prot(filp, vma->vm_pgoff, size,
+	                                         vma->vm_page_prot);
+
+	vma->vm_ops = &rpad_hk_mmap_mem_ops;
+
+	/* Remap-pfn-range will mark the range VM_IO */
+	if (remap_pfn_range(vma, vma->vm_start, vma->vm_pgoff, size,
+	                    vma->vm_page_prot))
+		return -EAGAIN;
+
+	return 0;
+}
+
 static struct file_operations rpad_hk_fops = {
 	.owner		= THIS_MODULE,
+	.mmap		= rpad_hk_mmap,
 };
 
 struct rpad_devtype_data rpad_hk_data = {

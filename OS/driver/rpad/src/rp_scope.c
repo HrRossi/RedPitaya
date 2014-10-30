@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
+#include <linux/sched.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
@@ -61,7 +62,7 @@ static unsigned int ddr_maxsize = 0x00400000UL;
 static struct rpad_device *rpad_setup_scope(const struct rpad_device *dev_temp)
 {
 	struct rpad_scope *scope;
-	// FIXME dma_alloc_coherent mit ordentlichem device ?
+	/* FIXME dma_alloc_coherent with the device instead of get_free_pages ? */
 	//dma_addr_t dma_handle;
 	//void *cpu_addr;
 	//size_t size;
@@ -98,7 +99,7 @@ static struct rpad_device *rpad_setup_scope(const struct rpad_device *dev_temp)
 	scope->buffer_addr = cpu_addr;
 	scope->buffer_size = size;
 	//scope->buffer_phys_addr = dma_handle;
-	scope->buffer_phys_addr = virt_to_phys((void *)cpu_addr); // FIXME we're not supposed to use virt_to_phys
+	scope->buffer_phys_addr = virt_to_phys((void *)cpu_addr); /* FIXME we're not supposed to use virt_to_phys */
 
 	scope->ba_addr = scope->buffer_addr;
 	scope->ba_size = scope->buffer_size / 2;
@@ -144,7 +145,7 @@ static int init_hardware(struct rpad_scope *scope)
 
 	id = ioread32(rp_addr(scope, RPAD_SYS_ID));
 	if (RPAD_VERSION(id) != 1)
-		return -ENODEV;
+		return -ENODEV; /* not a supported version */
 
 	/* load buffer addresses */
 	iowrite32(scope->ba_phys_addr, rp_addr(scope, SCOPE_ddr_a_base));
@@ -156,11 +157,11 @@ static int init_hardware(struct rpad_scope *scope)
 
 	/* stop scope */
 	iowrite32(0x00000002, rp_addr(scope, SCOPE_control));
-	/* activate address injection */
+	/* activate address injection A/B */
 	iowrite32(0x0000000c, rp_addr(scope, SCOPE_ddr_control));
 	/* injection takes a few ADC cycles */
 	udelay(5);
-	/* enable dumping on both channels */
+	/* enable dumping on A/B */
 	iowrite32(0x00000003, rp_addr(scope, SCOPE_ddr_control));
 	/* arm scope */
 	iowrite32(0x00000001, rp_addr(scope, SCOPE_control));
@@ -186,8 +187,7 @@ void stop_hardware(struct rpad_scope *scope)
 /*
  * specific operations done during open are still in flux
  *
- * initialize hardware and allocate text_page, if not already done. reset the
- * singular current read pointer und prepare the first batch of data.
+ * initialize hardware
  */
 static int rpad_scope_open(struct inode *inodp, struct file *filp)
 {
@@ -210,7 +210,7 @@ static int rpad_scope_open(struct inode *inodp, struct file *filp)
 /*
  * specific operations done during release are still in flux
  *
- * free text_page, mark device uninitialized.
+ * stop scope, mark device uninitialized.
  */
 static int rpad_scope_release(struct inode *inodp, struct file *filp)
 {
@@ -228,6 +228,7 @@ static int rpad_scope_release(struct inode *inodp, struct file *filp)
 
 /*
  * specific operations done during read are still in flux
+ *
  * read data from DMA buffer and copy to userspace
  * block until data available
  */
@@ -251,19 +252,27 @@ static ssize_t rpad_scope_read(struct file *filp,
 		goto out;
 	}
 
-	curr = ioread32(rp_addr(scope, SCOPE_ddr_a_curr)) - scope->ba_phys_addr;
+	if (uoff == scope->ba_last_curr) {
+		curr = ioread32(rp_addr(scope, SCOPE_ddr_a_curr))
+		     - scope->ba_phys_addr;
 
-	while (uoff == scope->ba_last_curr && curr == scope->ba_last_curr) {
-		/* no unread data */
-		/* FIXME block non-busy and interruptable until data available */
+		while (curr == scope->ba_last_curr) {
+			/* no unread data */
+			if (scope->resched &&
+			    schedule_timeout_interruptible(scope->resched)) {
+				size = -ERESTARTSYS;
+				goto out;
+			}
 
-		curr = ioread32(rp_addr(scope, SCOPE_ddr_a_curr)) - scope->ba_phys_addr;
+			curr = ioread32(rp_addr(scope, SCOPE_ddr_a_curr))
+			     - scope->ba_phys_addr;
+		}
+		scope->ba_last_curr = curr;
 	}
 
 	/* unread data */
-	scope->ba_last_curr = curr;
-	if (curr < uoff) {
-		if (uoff == scope->ba_size) {
+	if (curr < uoff) { /* curr already wrapped, uoff not yet */
+		if (uoff == scope->ba_size) { /* uoff about to wrap ? */
 			uoff = 0UL;
 			*uoffp = 0LL;
 		} else {
@@ -309,7 +318,6 @@ static int rpad_scope_mmap(struct file *filp, struct vm_area_struct *vma)
 	size_t size = vma->vm_end - vma->vm_start;
 	resource_size_t addr = vma->vm_pgoff << PAGE_SHIFT;
 
-	printk(KERN_ALERT "rpad_scope0: vm %p sa %p\n", (void *)vma->vm_pgoff, (void *)scope->rp_dev.sys_addr);
 	if (addr        < scope->rp_dev.sys_addr ||
 	    addr + size > scope->rp_dev.sys_addr + RPAD_PL_REGION_SIZE)
 		return -EINVAL;
