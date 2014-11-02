@@ -96,7 +96,7 @@ module red_pitaya_scope
     output [64-1:0] adcbuf_rdata_o          //
 );
 
-/* ID values to be read by the device driver, mapped at 40100ff0 - 40100fff */
+// ID values to be read by the device driver, mapped at 40100ff0 - 40100fff
 localparam SYS_ID = 32'h00200001; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
 localparam SYS_1 = 32'h00000000;
 localparam SYS_2 = 32'h00000000;
@@ -174,8 +174,8 @@ red_pitaya_dfilt1 i_dfilt1_chb
 //---------------------------------------------------------------------------------
 //  Decimate input data
 
-reg  [ 14-1: 0] adc_a_dat     ;
-reg  [ 14-1: 0] adc_b_dat     ;
+reg  [ 16-1: 0] adc_a_dat     ;
+reg  [ 16-1: 0] adc_b_dat     ;
 reg  [ 32-1: 0] adc_a_sum     ;
 reg  [ 32-1: 0] adc_b_sum     ;
 reg  [ 17-1: 0] set_dec       ;
@@ -204,16 +204,28 @@ always @(posedge adc_clk_i) begin
 
       adc_dv <= (adc_dec_cnt >= set_dec) ;
 
-      case (set_dec & {17{set_avg_en}})
-         17'h0     : begin adc_a_dat <= adc_a_filt_out;            adc_b_dat <= adc_b_filt_out;        end
-         17'h1     : begin adc_a_dat <= adc_a_sum[15+0 :  0];      adc_b_dat <= adc_b_sum[15+0 :  0];  end
-         17'h8     : begin adc_a_dat <= adc_a_sum[15+3 :  3];      adc_b_dat <= adc_b_sum[15+3 :  3];  end
-         17'h40    : begin adc_a_dat <= adc_a_sum[15+6 :  6];      adc_b_dat <= adc_b_sum[15+6 :  6];  end
-         17'h400   : begin adc_a_dat <= adc_a_sum[15+10: 10];      adc_b_dat <= adc_b_sum[15+10: 10];  end
-         17'h2000  : begin adc_a_dat <= adc_a_sum[15+13: 13];      adc_b_dat <= adc_b_sum[15+13: 13];  end
-         17'h10000 : begin adc_a_dat <= adc_a_sum[15+16: 16];      adc_b_dat <= adc_b_sum[15+16: 16];  end
-         default   : begin adc_a_dat <= adc_a_sum[15+0 :  0];      adc_b_dat <= adc_b_sum[15+0 :  0];  end
-      endcase
+        case (set_dec & {17{set_avg_en}})
+        17'h0:      begin   adc_a_dat <= {adc_a_filt_out,2'b00};    adc_b_dat <= {adc_b_filt_out,2'b00};    end
+        17'h1:      begin   adc_a_dat <= {adc_a_sum[ 0+:14],2'b00}; adc_b_dat <= {adc_b_sum[ 0+:14],2'b00}; end
+        17'h2:      begin   adc_a_dat <= {adc_a_sum[ 0+:15],1'b0};  adc_b_dat <= {adc_b_sum[ 0+:15],1'b0};  end
+        17'h4:      begin   adc_a_dat <=  adc_a_sum[ 0+:16];        adc_b_dat <=  adc_b_sum[ 0+:16];        end
+        17'h8:      begin   adc_a_dat <=  adc_a_sum[ 1+:16];        adc_b_dat <=  adc_b_sum[ 1+:16];        end
+        17'h10:     begin   adc_a_dat <=  adc_a_sum[ 2+:16];        adc_b_dat <=  adc_b_sum[ 2+:16];        end
+        17'h20:     begin   adc_a_dat <=  adc_a_sum[ 3+:16];        adc_b_dat <=  adc_b_sum[ 3+:16];        end
+        17'h40:     begin   adc_a_dat <=  adc_a_sum[ 4+:16];        adc_b_dat <=  adc_b_sum[ 4+:16];        end
+        17'h80:     begin   adc_a_dat <=  adc_a_sum[ 5+:16];        adc_b_dat <=  adc_b_sum[ 5+:16];        end
+        17'h100:    begin   adc_a_dat <=  adc_a_sum[ 6+:16];        adc_b_dat <=  adc_b_sum[ 6+:16];        end
+        17'h200:    begin   adc_a_dat <=  adc_a_sum[ 7+:16];        adc_b_dat <=  adc_b_sum[ 7+:16];        end
+        17'h400:    begin   adc_a_dat <=  adc_a_sum[ 8+:16];        adc_b_dat <=  adc_b_sum[ 8+:16];        end
+        17'h800:    begin   adc_a_dat <=  adc_a_sum[ 9+:16];        adc_b_dat <=  adc_b_sum[ 9+:16];        end
+        17'h1000:   begin   adc_a_dat <=  adc_a_sum[10+:16];        adc_b_dat <=  adc_b_sum[10+:16];        end
+        17'h2000:   begin   adc_a_dat <=  adc_a_sum[11+:16];        adc_b_dat <=  adc_b_sum[11+:16];        end
+        17'h4000:   begin   adc_a_dat <=  adc_a_sum[12+:16];        adc_b_dat <=  adc_b_sum[12+:16];        end
+        17'h8000:   begin   adc_a_dat <=  adc_a_sum[13+:16];        adc_b_dat <=  adc_b_sum[13+:16];        end
+        17'h10000:  begin   adc_a_dat <=  adc_a_sum[14+:16];        adc_b_dat <=  adc_b_sum[14+:16];        end
+        default:    begin   adc_a_dat <= {adc_a_sum[ 0+:14],2'b00}; adc_b_dat <= {adc_b_sum[ 0+:14],2'b00}; end
+        // TODO put some magical tricks in default case to decimate with non-power-of-two factors
+        endcase
 
    end
 end
@@ -235,10 +247,10 @@ reg   [  14-1: 0] adc_b_buf [0:(1<<RSZ)-1] ;
 reg   [  14-1: 0] adc_a_rd      ;
 reg   [  14-1: 0] adc_b_rd      ;
 reg   [ RSZ-1: 0] adc_wp        ;
-reg   [ RSZ-1: 0] adc_raddr     ;
+(* ASYNC_REG="true" *)  reg   [ RSZ-1: 0] adc_raddr     ;
 reg   [ RSZ-1: 0] adc_a_raddr   ;
 reg   [ RSZ-1: 0] adc_b_raddr   ;
-reg   [   4-1: 0] adc_rval      ;
+(* ASYNC_REG="true" *)  reg   [   4-1: 0] adc_rval      ;
 wire              adc_rd_dv     ;
 reg               adc_we        ;
 reg               adc_trig      ;
@@ -250,55 +262,51 @@ reg   [  32-1: 0] adc_dly_cnt   ;
 reg               adc_dly_do    ;
 
 BRAM_SDP_MACRO #(
-    .BRAM_SIZE("36Kb"), // Target BRAM, "18Kb" or "36Kb" 
-    .DEVICE("7SERIES"), // Target device: "7SERIES" 
-    .WRITE_WIDTH(16),   // Valid values are 1-72 (37-72 only valid when BRAM_SIZE="36Kb")
-    .READ_WIDTH(64),    // Valid values are 1-72 (37-72 only valid when BRAM_SIZE="36Kb")
-    .DO_REG(0),         // Optional output register (0 or 1)
+    .BRAM_SIZE("36Kb"),             // Target BRAM, "18Kb" or "36Kb" 
+    .DEVICE("7SERIES"),             // Target device: "7SERIES" 
+    .WRITE_WIDTH(16),               // Valid values are 1-72 (37-72 only valid when BRAM_SIZE="36Kb")
+    .READ_WIDTH(64),                // Valid values are 1-72 (37-72 only valid when BRAM_SIZE="36Kb")
+    .DO_REG(0),                     // Optional output register (0 or 1)
     .INIT_FILE("NONE"),
-    .SIM_COLLISION_CHECK("ALL"), // Collision check enable "ALL", "WARNING_ONLY", 
-                                 //   "GENERATE_X_ONLY" or "NONE" 
+    .SIM_COLLISION_CHECK("ALL"),    // Collision check enable "ALL", "WARNING_ONLY", "GENERATE_X_ONLY" or "NONE" 
     .SRVAL(72'h000000000000000000), // Set/Reset value for port output
     .INIT(72'h000000000000000000),  // Initial values on output port
-    .WRITE_MODE("WRITE_FIRST"),  // Specify "READ_FIRST" for same clock or synchronous clocks
-                                 //   Specify "WRITE_FIRST for asynchronous clocks on ports
+    .WRITE_MODE("WRITE_FIRST"),     // "READ_FIRST" for same clock or synchronous clocks, "WRITE_FIRST" for asynchronous clocks on ports
 ) adc_a_buffer (
     .DO     (buf_a_data_o       ),  // Output read data port, width defined by READ_WIDTH parameter
-    .DI     ({2'b00,adc_a_dat}  ),  // Input write data port, width defined by WRITE_WIDTH parameter
+    .DI     (adc_a_dat          ),  // Input write data port, width defined by WRITE_WIDTH parameter
     .RDADDR (adcbuf_raddr_i     ),  // Input read address, width defined by read port depth
     .RDCLK  (adcbuf_clk_i       ),  // 1-bit input read clock
     .RDEN   (adcbuf_select_i[0] ),  // 1-bit input read port enable
     .REGCE  (1'b0               ),  // 1-bit input read output register enable
     .RST    (!adcbuf_rstn_i     ),  // 1-bit input reset      
-    .WE     (adc_we             ),  // Input write enable, width defined by write port depth
-    .WRADDR (adc_wp             ),  // Input write address, width defined by write port depth
+    .WE     ({2{adc_we}}        ),  // Input write enable, width defined by write port depth
+    .WRADDR (adc_wp[10:0]       ),  // Input write address, width defined by write port depth
     .WRCLK  (adc_clk_i          ),  // 1-bit input write clock
     .WREN   (adc_dv             )   // 1-bit input write port enable
 );
 
 BRAM_SDP_MACRO #(
-    .BRAM_SIZE("36Kb"), // Target BRAM, "18Kb" or "36Kb" 
-    .DEVICE("7SERIES"), // Target device: "7SERIES" 
-    .WRITE_WIDTH(16),   // Valid values are 1-72 (37-72 only valid when BRAM_SIZE="36Kb")
-    .READ_WIDTH(64),    // Valid values are 1-72 (37-72 only valid when BRAM_SIZE="36Kb")
-    .DO_REG(0),         // Optional output register (0 or 1)
+    .BRAM_SIZE("36Kb"),             // Target BRAM, "18Kb" or "36Kb" 
+    .DEVICE("7SERIES"),             // Target device: "7SERIES" 
+    .WRITE_WIDTH(16),               // Valid values are 1-72 (37-72 only valid when BRAM_SIZE="36Kb")
+    .READ_WIDTH(64),                // Valid values are 1-72 (37-72 only valid when BRAM_SIZE="36Kb")
+    .DO_REG(0),                     // Optional output register (0 or 1)
     .INIT_FILE("NONE"),
-    .SIM_COLLISION_CHECK("ALL"), // Collision check enable "ALL", "WARNING_ONLY", 
-                                 //   "GENERATE_X_ONLY" or "NONE" 
+    .SIM_COLLISION_CHECK("ALL"),    // Collision check enable "ALL", "WARNING_ONLY", "GENERATE_X_ONLY" or "NONE" 
     .SRVAL(72'h000000000000000000), // Set/Reset value for port output
     .INIT(72'h000000000000000000),  // Initial values on output port
-    .WRITE_MODE("WRITE_FIRST"),  // Specify "READ_FIRST" for same clock or synchronous clocks
-                                 //   Specify "WRITE_FIRST for asynchronous clocks on ports
+    .WRITE_MODE("WRITE_FIRST"),     // "READ_FIRST" for same clock or synchronous clocks, "WRITE_FIRST" for asynchronous clocks on ports
 ) adc_b_buffer (
     .DO     (buf_b_data_o       ),  // Output read data port, width defined by READ_WIDTH parameter
-    .DI     ({2'b00,adc_b_dat}  ),  // Input write data port, width defined by WRITE_WIDTH parameter
+    .DI     (adc_b_dat          ),  // Input write data port, width defined by WRITE_WIDTH parameter
     .RDADDR (adcbuf_raddr_i     ),  // Input read address, width defined by read port depth
     .RDCLK  (adcbuf_clk_i       ),  // 1-bit input read clock
     .RDEN   (adcbuf_select_i[1] ),  // 1-bit input read port enable
     .REGCE  (1'b0               ),  // 1-bit input read output register enable
     .RST    (!adcbuf_rstn_i     ),  // 1-bit input reset      
-    .WE     (adc_we             ),  // Input write enable, width defined by write port depth
-    .WRADDR (adc_wp             ),  // Input write address, width defined by write port depth
+    .WE     ({2{adc_we}}        ),  // Input write enable, width defined by write port depth
+    .WRADDR (adc_wp[10:0]       ),  // Input write address, width defined by write port depth
     .WRCLK  (adc_clk_i          ),  // 1-bit input write clock
     .WREN   (adc_dv             )   // 1-bit input write port enable
 );
@@ -369,8 +377,8 @@ end
 
 always @(posedge adc_clk_i) begin
    if (adc_we && adc_dv) begin
-      adc_a_buf[adc_wp] <= adc_a_dat ;
-      adc_b_buf[adc_wp] <= adc_b_dat ;
+      adc_a_buf[adc_wp] <= adc_a_dat[16-1:2];
+      adc_b_buf[adc_wp] <= adc_b_dat[16-1:2];
    end
 end
 
@@ -514,12 +522,12 @@ end
 //
 //  External trigger
 
-reg  [  3-1: 0] ext_trig_in    ;
+(* ASYNC_REG="true" *)  reg  [  3-1: 0] ext_trig_in    ;
 reg  [  2-1: 0] ext_trig_dp    ;
 reg  [  2-1: 0] ext_trig_dn    ;
 reg  [ 20-1: 0] ext_trig_debp  ;
 reg  [ 20-1: 0] ext_trig_debn  ;
-reg  [  3-1: 0] asg_trig_in    ;
+(* ASYNC_REG="true" *)  reg  [  3-1: 0] asg_trig_in    ;
 reg  [  2-1: 0] asg_trig_dp    ;
 reg  [  2-1: 0] asg_trig_dn    ;
 reg  [ 20-1: 0] asg_trig_debp  ;

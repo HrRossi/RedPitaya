@@ -92,12 +92,13 @@ module red_pitaya_asg
     input               dacbuf_rstn_i   ,   // reset
     input   [      1:0] dacbuf_select_i ,   // channel buffer select
     output  [    4-1:0] dacbuf_ready_o  ,   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    output  [    4-1:0] dacbuf_close_o  ,   // buffer unready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
     input   [   12-1:0] dacbuf_waddr_i  ,   // buffer read address
     input   [   64-1:0] dacbuf_wdata_i  ,   // buffer read data
     input               dacbuf_valid_i      // buffer data valid
 );
 
-/* ID values to be read by the device driver, mapped at 40200ff0 - 40200fff */
+// ID values to be read by the device driver, mapped at 40200ff0 - 40200fff
 localparam SYS_ID = 32'h00300001; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
 localparam SYS_1 = 32'h00000000;
 localparam SYS_2 = 32'h00000000;
@@ -146,6 +147,8 @@ reg               trig_b_sw        ;
 reg   [   3-1: 0] trig_b_src       ;
 wire              trig_b_done      ;
 
+reg  [ RSZ-2:0] buf_a_rdymx;    // last ChA read address where it's ok to start filling opposite buffer
+reg  [ RSZ-2:0] buf_b_rdymx;    // last ChB read address where it's ok to start filling opposite buffer
 
 red_pitaya_asg_ch  #(.RSZ ( RSZ ))  i_cha
 (
@@ -176,9 +179,12 @@ red_pitaya_asg_ch  #(.RSZ ( RSZ ))  i_cha
     .dacbuf_rstn_i      (dacbuf_rstn_i          ),  // reset
     .dacbuf_select_i    (dacbuf_select_i[0]     ),  // channel buffer select
     .dacbuf_ready_o     (dacbuf_ready_o[1:0]    ),  // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    .dacbuf_close_o     (dacbuf_close_o[1:0]    ),  // buffer deready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
     .dacbuf_waddr_i     (dacbuf_waddr_i         ),  // buffer read address
     .dacbuf_wdata_i     (dacbuf_wdata_i         ),  // buffer read data
-    .dacbuf_valid_i     (dacbuf_valid_i         )   // buffer data valid
+    .dacbuf_valid_i     (dacbuf_valid_i         ),  // buffer data valid
+    // buffer configuration
+    .dacbuf_rdymx_i     (buf_b_rdymx            )   // last read address where it's ok to start filling opposite buffer
 );
 
 
@@ -211,9 +217,12 @@ red_pitaya_asg_ch  #(.RSZ ( RSZ ))  i_chb
     .dacbuf_rstn_i      (dacbuf_rstn_i          ),  // reset
     .dacbuf_select_i    (dacbuf_select_i[1]     ),  // channel buffer select
     .dacbuf_ready_o     (dacbuf_ready_o[3:2]    ),  // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    .dacbuf_close_o     (dacbuf_close_o[3:2]    ),  // buffer deready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
     .dacbuf_waddr_i     (dacbuf_waddr_i         ),  // buffer read address
     .dacbuf_wdata_i     (dacbuf_wdata_i         ),  // buffer read data
-    .dacbuf_valid_i     (dacbuf_valid_i         )   // buffer data valid
+    .dacbuf_valid_i     (dacbuf_valid_i         ),  // buffer data valid
+    // buffer configuration
+    .dacbuf_rdymx_i     (buf_b_rdymx            )   // last read address where it's ok to start filling opposite buffer
 );
 
 assign trig_out_o = trig_a_done ;
@@ -263,6 +272,8 @@ always @(posedge dac_clk_i) begin
         ddr_b_base  <= 32'h00000000;
         ddr_b_end   <= 32'h00000000;
         ddr_control <= 4'b0000;
+        buf_b_rdymx <= {RSZ-1{1'b1}};
+        buf_b_rdymx <= {RSZ-1{1'b1}};
    end
    else begin
 
@@ -295,8 +306,10 @@ always @(posedge dac_clk_i) begin
             if (addr[19:0] == 20'h100)  ddr_control <= wdata[4-1:0];
             if (addr[19:0] == 20'h104)  ddr_a_base  <= wdata;
             if (addr[19:0] == 20'h108)  ddr_a_end   <= wdata;
-            if (addr[19:0] == 20'h10c)  ddr_b_base  <= wdata;
-            if (addr[19:0] == 20'h110)  ddr_b_end   <= wdata;
+            if (addr[19:0] == 20'h10c)  buf_a_rdymx <= wdata[RSZ-2:0];
+            if (addr[19:0] == 20'h110)  ddr_b_base  <= wdata;
+            if (addr[19:0] == 20'h114)  ddr_b_end   <= wdata;
+            if (addr[19:0] == 20'h118)  buf_b_rdymx <= wdata[RSZ-2:0];
       end
    end
 end
@@ -323,8 +336,10 @@ always @(*) begin
 
     20'h00104:  begin   ack <= 1'b1; rdata <= ddr_a_base;   end
     20'h00108:  begin   ack <= 1'b1; rdata <= ddr_a_end;    end
-    20'h0010c:  begin   ack <= 1'b1; rdata <= ddr_b_base;   end
-    20'h00110:  begin   ack <= 1'b1; rdata <= ddr_b_end;    end
+    20'h0010c:  begin   ack <= 1'b1; rdata <= {{32-RSZ+1{1'b0}},buf_a_rdymx};   end
+    20'h00110:  begin   ack <= 1'b1; rdata <= ddr_b_base;   end
+    20'h00114:  begin   ack <= 1'b1; rdata <= ddr_b_end;    end
+    20'h00118:  begin   ack <= 1'b1; rdata <= {{32-RSZ+1{1'b0}},buf_b_rdymx};   end
 
     20'h00ff0:  begin   ack <= 1'b1; rdata <= SYS_ID;       end
     20'h00ff4:  begin   ack <= 1'b1; rdata <= SYS_1;        end

@@ -1,7 +1,17 @@
 //////////////////////////////////////////////////////////////////////////////////
 // Engineer: Nils Roos <doctor@smart.ms>
-// 
 // Create Date: 16.07.2014 22:57:49
+// 
+// Module Name: axi_slurpddr_master
+// Description: 
+// todo
+// 
+// Known issues:
+// - if the ASG step is greater than 1 sample, glitches may occur when loading a
+//   new buffer while the ASG is running; there's nothing can be done about it,
+//   because we simply can't write faster (break-even occurs at 2 sample steps on
+//   both channels, but anything > 1 might glitch due to processing overhead)
+// 
 // Module Name: axi_dump2ddr_master
 // Description: 
 // AXI HP master that transfers data from two BRAM buffers A/B (not part of the
@@ -11,114 +21,71 @@
 // The AXI master uses maximum sized bursts and can employ the full outstanding
 // write capabilities of the memory interconnect. 
 // 
+// Known issues:
+// - the first four samples on each channel are corrupted when enabling the DDR
+//   Dump functionality; not likely to get fixed because this made it easier to
+//   not loose samples during buffer wrap-arounds
+// 
 // Revision:
 // Revision 0.01 - File Created
 // Additional Comments: designed for use with the RedPitaya hardware
 // 
-// Known issues:
-// - the first four samples on each channel are corrupted when enabling the DDR
-//   dump functionality; not likely to get fixed because this made it easier to
-//   not loose samples during buffer wrap-arounds
-// 
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module axi_dump2ddr_master #(
-    parameter   AXI_DW  =  64           , // data width (8,16,...,1024)
-    parameter   AXI_AW  =  32           , // AXI address width
-    parameter   AXI_IW  =   6           , // AXI ID width
-    parameter   AXI_SW  = AXI_DW >> 3   , // AXI strobe width - 1 bit for every data byte
-    parameter   DBF_AW  =   9           , // DDR Dump buffer address width
-    parameter   SBF_AW  =  12           , // DDR Slurp buffer address width
-    parameter   BUF_CH  =   2             // number of buffered channels
+// --------------------------------------------------------------------------------------------------
+//
+//                   AXI DDR Slurp
+//
+// --------------------------------------------------------------------------------------------------
+module axi_slurpddr_master #(
+    parameter   AXI_DW  =  64,  // data width (8,16,...,1024)
+    parameter   AXI_AW  =  32,  // AXI address width
+    parameter   AXI_IW  =   6,  // AXI ID width
+    parameter   BUF_AW  =  12,  // DDR Slurp buffer address width
+    parameter   BUF_CH  =   2   // number of buffered channels
 )(
-    // AXI HP master interface
-    output [AXI_AW-1:0] axi_araddr_o    ,
-    output [       1:0] axi_arburst_o   ,
-    output [       3:0] axi_arcache_o   ,
-    output [AXI_IW-1:0] axi_arid_o      ,
-    output [       3:0] axi_arlen_o     ,
-    output [       1:0] axi_arlock_o    ,
-    output [       2:0] axi_arprot_o    ,
-    output [       3:0] axi_arqos_o     ,
-    input               axi_arready_i   ,
-    output [       2:0] axi_arsize_o    ,
-    output              axi_arvalid_o   ,
-    output [AXI_AW-1:0] axi_awaddr_o    ,
-    output [       1:0] axi_awburst_o   ,
-    output [       3:0] axi_awcache_o   ,
-    output [AXI_IW-1:0] axi_awid_o      ,
-    output [       3:0] axi_awlen_o     ,
-    output [       1:0] axi_awlock_o    ,
-    output [       2:0] axi_awprot_o    ,
-    output [       3:0] axi_awqos_o     ,
-    input               axi_awready_i   ,
-    output [       2:0] axi_awsize_o    ,
-    output              axi_awvalid_o   ,
-    input  [AXI_IW-1:0] axi_bid_i       ,
-    output              axi_bready_o    ,
-    input  [       1:0] axi_bresp_i     ,
-    input               axi_bvalid_i    ,
-    input  [AXI_DW-1:0] axi_rdata_i     ,
-    input  [AXI_IW-1:0] axi_rid_i       ,
-    input               axi_rlast_i     ,
-    output              axi_rready_o    ,
-    input  [       1:0] axi_rresp_i     ,
-    input               axi_rvalid_i    ,
-    output [AXI_DW-1:0] axi_wdata_o     ,
-    output [AXI_IW-1:0] axi_wid_o       ,
-    output              axi_wlast_o     ,
-    input               axi_wready_i    ,
-    output [AXI_SW-1:0] axi_wstrb_o     ,
-    output              axi_wvalid_o    ,
-
-    // ADC/DAC clock & reset
-    input                   buf_clk_i,
-    input                   buf_rstn_i,
-
-    // ADC connection
-    output [    BUF_CH-1:0] dbuf_select_o,
-    input  [  2*BUF_CH-1:0] dbuf_ready_i,   // [0]: ChA 0-1k, [1]: ChA 1k-2k, [2]: ChB 0-1k, [3]: ChB 1k-2k
-    output [    DBF_AW-1:0] dbuf_raddr_o,
-    input  [    AXI_DW-1:0] dbuf_rdata_i,
-
-    // DDR Dump parameter export
-    input       [   32-1:0] ddrd_a_base_i,  // DDR Dump ChA buffer base address
-    input       [   32-1:0] ddrd_a_end_i,   // DDR Dump ChA buffer end address + 1
-    output      [   32-1:0] ddrd_a_curr_o,  // DDR Dump ChA current write address
-    input       [   32-1:0] ddrd_b_base_i,  // DDR Dump ChB buffer base address
-    input       [   32-1:0] ddrd_b_end_i,   // DDR Dump ChB buffer end address + 1
-    output      [   32-1:0] ddrd_b_curr_o,  // DDR Dump ChB current write address
-    input       [    4-1:0] ddrd_control_i, // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+    // AXI master read channel
+    output [    AXI_AW-1:0] axi_araddr_o,
+    output [           1:0] axi_arburst_o,
+    output [           3:0] axi_arcache_o,
+    output [    AXI_IW-1:0] axi_arid_o,
+    output [           3:0] axi_arlen_o,
+    output [           1:0] axi_arlock_o,
+    output [           2:0] axi_arprot_o,
+    output [           3:0] axi_arqos_o,
+    input                   axi_arready_i,
+    output [           2:0] axi_arsize_o,
+    output                  axi_arvalid_o,
+    input  [    AXI_DW-1:0] axi_rdata_i,
+    input  [    AXI_IW-1:0] axi_rid_i,
+    input                   axi_rlast_i,
+    output                  axi_rready_o,
+    input  [           1:0] axi_rresp_i,
+    input                   axi_rvalid_i,
+    // AXI clock & reset
+    input                   axi_clk_i,
+    input                   axi_rstn_i,
 
     // DAC connection
-    output [    BUF_CH-1:0] sbuf_select_o,  //
-    input  [  2*BUF_CH-1:0] sbuf_ready_i,   // [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
-    output [    SBF_AW-1:0] sbuf_waddr_o,   //
-    output [    AXI_DW-1:0] sbuf_wdata_o,   //
-    output                  sbuf_valid_o,   //
+    output [    BUF_CH-1:0] buf_select_o,   //
+    input  [  2*BUF_CH-1:0] buf_ready_i,    // [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    input  [  2*BUF_CH-1:0] buf_close_i,    // [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    output [    BUF_AW-1:0] buf_waddr_o,    //
+    output [    AXI_DW-1:0] buf_wdata_o,    //
+    output                  buf_valid_o,    //
 
-    // DDR Slurp parameter export
-    input       [   32-1:0] ddrs_a_base_i,  // DDR Slurp ChA buffer base address
-    input       [   32-1:0] ddrs_a_end_i,   // DDR Slurp ChA buffer end address + 1
-    input       [   32-1:0] ddrs_b_base_i,  // DDR Slurp ChB buffer base address
-    input       [   32-1:0] ddrs_b_end_i,   // DDR Slurp ChB buffer end address + 1
-    input       [    4-1:0] ddrs_control_i  // DDR Slurp control
+    // DDR Slurp parameter
+    input       [   32-1:0] ddr_a_base_i,   // DDR Slurp ChA buffer base address
+    input       [   32-1:0] ddr_a_end_i,    // DDR Slurp ChA buffer end address + 1
+    input       [   32-1:0] ddr_b_base_i,   // DDR Slurp ChB buffer base address
+    input       [   32-1:0] ddr_b_end_i,    // DDR Slurp ChB buffer end address + 1
+    input       [    4-1:0] ddr_control_i   // DDR Slurp control
 );
 
 localparam AXI_CW = 4;      // width of the ID expiry counters
 localparam AXI_CI = 4'hf;   // initial countdown value for the ID expiry counters
 genvar CNT;
-
-
-// --------------------------------------------------------------------------------------------------
-// set unused outputs to 0 - when we implement scatter gather capability, we'll be needing these anyway
-assign  axi_araddr_o  = 32'd0;
-assign  axi_arid_o    = 6'd0;
-assign  axi_arvalid_o = 1'd0;
-assign  axi_rready_o  = 1'd0;
-
-assign  sbuf_valid_o  = 1'b1;
 
 
 // --------------------------------------------------------------------------------------------------
@@ -131,6 +98,358 @@ assign  axi_arprot_o  = 3'b000;         // normal, secure, data
 assign  axi_arqos_o   = 4'd0;           // priority 0
 assign  axi_arlock_o  = 2'b00;          // normal access
 
+
+// --------------------------------------------------------------------------------------------------
+// process ready latches from asg
+reg  [   4-1:0] buf_ready;      // asg buffer ready registers Al,Ah,Bl,Bh
+wire [   4-1:0] buf_started;    // signals start of buffer processing Al,Ah,Bl,Bh
+wire [   4-1:0] buf_finished;   // signals end of buffer processing Al,Ah,Bl,Bh
+
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        buf_ready <= 4'b0000;
+    end else begin
+        if (buf_ready_i[0]) begin
+            buf_ready[0] <= ddr_control_i[0];
+        end else if (!buf_started[0] & buf_close_i[0] | buf_finished[0]) begin
+            buf_ready[0] <= 1'b0;
+        end else begin
+            buf_ready[0] <= buf_ready[0];
+        end
+
+        if (buf_ready_i[1]) begin
+            buf_ready[1] <= ddr_control_i[0];
+        end else if (!buf_started[1] & buf_close_i[1] | buf_finished[1]) begin
+            buf_ready[1] <= 1'b0;
+        end else begin
+            buf_ready[1] <= buf_ready[1];
+        end
+
+        if (buf_ready_i[2]) begin
+            buf_ready[2] <= ddr_control_i[1];
+        end else if (!buf_started[2] & buf_close_i[2] | buf_finished[2]) begin
+            buf_ready[2] <= 1'b0;
+        end else begin
+            buf_ready[2] <= buf_ready[2];
+        end
+
+        if (buf_ready_i[3]) begin
+            buf_ready[3] <= ddr_control_i[1];
+        end else if (!buf_started[3] & buf_close_i[3] | buf_finished[3]) begin
+            buf_ready[3] <= 1'b0;
+        end else begin
+            buf_ready[3] <= buf_ready[3];
+        end
+    end
+end
+
+
+// --------------------------------------------------------------------------------------------------
+// transfer AXI data to BRAM
+reg  [      32-1:0] ddr_rp;         // DDR read pointer
+reg                 ddr_ar_valid;   // DDR read address valid
+reg  [      32-1:0] ddr_a_curr;     // DDR ChA current read address
+reg  [      32-1:0] ddr_b_curr;     // DDR ChB current read address
+reg                 buf_sel_ab;     // stores the currently active channel
+reg  [  BUF_AW-1:0] buf_wp;         // BRAM write pointer
+reg  [8*AXI_CW-1:0] id_cnt;         // read ID0-7 expiry counter
+reg  [       8-1:0] id_sel_ab;      // read ID0-7 BRAM active channel
+reg  [8*BUF_AW-1:0] id_addr;        // read ID0-7 BRAM write address
+reg                 tx_in_pr;       // flag buffer transmission in progress
+reg                 burst_in_pr;    // flag burst in progress
+reg  [  AXI_IW-1:0] curr_id;        // current read ID
+
+//assign ddr_a_curr_o = ddr_a_curr;
+//assign ddr_b_curr_o = ddr_b_curr;
+
+// internal auxiliary signals
+wire [       8-1:0] id_busy         = {|id_cnt[7*AXI_CW+:AXI_CW],|id_cnt[6*AXI_CW+:AXI_CW],|id_cnt[5*AXI_CW+:AXI_CW],|id_cnt[4*AXI_CW+:AXI_CW],
+                                       |id_cnt[3*AXI_CW+:AXI_CW],|id_cnt[2*AXI_CW+:AXI_CW],|id_cnt[1*AXI_CW+:AXI_CW],|id_cnt[0*AXI_CW+:AXI_CW]};
+wire                id_free         = (id_busy != 8'b11111111);
+wire [      32-1:0] ddr_a_next      = ddr_a_curr + (2**BUF_AW)*8;
+wire [      32-1:0] ddr_b_next      = ddr_b_curr + (2**BUF_AW)*8;
+wire                buf_end         = axi_rvalid_i & axi_rlast_i & (buf_wp[BUF_AW-1:6] == {BUF_AW-6{1'b1}});
+wire [       4-1:0] buf_newready;
+wire                buf_pending     = |buf_newready;
+wire                start_new_tx    = buf_pending && (!tx_in_pr | buf_end) & id_free;
+wire                start_new_burst = (start_new_tx | tx_in_pr) & id_free;
+
+
+// --------------------------------------------------------------------------------------------------
+// transaction and burst control
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        tx_in_pr    <= 1'b0;
+    end else begin
+        if (start_new_tx) begin
+            tx_in_pr <= 1'b1;
+        end else if (tx_in_pr & buf_end & (!id_free | !buf_pending)) begin
+            tx_in_pr <= 1'b0;
+        end else begin
+            tx_in_pr <= tx_in_pr;
+        end
+    end
+end
+
+assign  buf_started[0]  = tx_in_pr & !buf_sel_ab & !buf_wp[BUF_AW-1];
+assign  buf_started[1]  = tx_in_pr & !buf_sel_ab &  buf_wp[BUF_AW-1];
+assign  buf_started[2]  = tx_in_pr &  buf_sel_ab & !buf_wp[BUF_AW-1];
+assign  buf_started[3]  = tx_in_pr &  buf_sel_ab &  buf_wp[BUF_AW-1];
+assign  buf_finished[0] = buf_started[0] & buf_end;
+assign  buf_finished[1] = buf_started[1] & buf_end;
+assign  buf_finished[2] = buf_started[2] & buf_end;
+assign  buf_finished[3] = buf_started[3] & buf_end;
+assign  buf_newready[0] = buf_ready[0] & !buf_finished[0];
+assign  buf_newready[1] = buf_ready[1] & !buf_finished[1];
+assign  buf_newready[2] = buf_ready[2] & !buf_finished[2];
+assign  buf_newready[3] = buf_ready[3] & !buf_finished[3];
+
+
+// --------------------------------------------------------------------------------------------------
+// BRAM control
+reg  [  BUF_CH-1:0] buf_select;
+reg  [  BUF_AW-1:0] buf_waddr;
+reg  [  AXI_DW-1:0] buf_wdata;
+reg                 buf_valid;
+
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        buf_sel_ab <= 1'b0;
+        buf_wp     <= {BUF_AW{1'b0}};
+    end else begin
+        if (start_new_tx) begin
+            buf_sel_ab <= !(buf_newready[0] | buf_newready[1]);
+        end else begin
+            buf_sel_ab <= buf_sel_ab;
+        end
+
+        if (start_new_tx) begin
+            buf_wp <= {!(buf_newready[0] | (!buf_newready[1] & buf_newready[2])),{BUF_AW-1{1'b0}}};
+        end else if (start_new_burst) begin
+            buf_wp <= buf_wp + 64; // 16 * 4 samples per burst
+        end else begin
+            buf_wp <= buf_wp;
+        end
+    end
+end
+
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        buf_select <= 2'b00;
+        buf_waddr  <= {BUF_AW{1'b0}};
+        buf_wdata  <= {AXI_DW{1'b0}};
+        buf_valid  <= 1'b0;
+    end else begin
+        if (axi_rvalid_i) begin
+            buf_wdata <= axi_rdata_i;
+
+            case (axi_rid_i)
+            0:  begin   buf_select <= id_sel_ab[0] ? 2'b10 : 2'b01; buf_waddr <= id_addr[0*BUF_AW+:BUF_AW]; buf_valid <= 1'b1;  end
+            1:  begin   buf_select <= id_sel_ab[1] ? 2'b10 : 2'b01; buf_waddr <= id_addr[1*BUF_AW+:BUF_AW]; buf_valid <= 1'b1;  end
+            2:  begin   buf_select <= id_sel_ab[2] ? 2'b10 : 2'b01; buf_waddr <= id_addr[2*BUF_AW+:BUF_AW]; buf_valid <= 1'b1;  end
+            3:  begin   buf_select <= id_sel_ab[3] ? 2'b10 : 2'b01; buf_waddr <= id_addr[3*BUF_AW+:BUF_AW]; buf_valid <= 1'b1;  end
+            4:  begin   buf_select <= id_sel_ab[4] ? 2'b10 : 2'b01; buf_waddr <= id_addr[4*BUF_AW+:BUF_AW]; buf_valid <= 1'b1;  end
+            5:  begin   buf_select <= id_sel_ab[5] ? 2'b10 : 2'b01; buf_waddr <= id_addr[5*BUF_AW+:BUF_AW]; buf_valid <= 1'b1;  end
+            6:  begin   buf_select <= id_sel_ab[6] ? 2'b10 : 2'b01; buf_waddr <= id_addr[6*BUF_AW+:BUF_AW]; buf_valid <= 1'b1;  end
+            7:  begin   buf_select <= id_sel_ab[7] ? 2'b10 : 2'b01; buf_waddr <= id_addr[7*BUF_AW+:BUF_AW]; buf_valid <= 1'b1;  end
+            default:    begin   buf_select <= 2'b00; buf_waddr  <= {BUF_AW{1'b0}}; buf_valid <= 1'b0;   end
+            endcase
+        end else begin
+            buf_select <= 2'b00;
+            buf_waddr  <= {BUF_AW{1'b0}};
+            buf_wdata  <= {AXI_DW{1'b0}};
+            buf_valid  <= 1'b0;
+        end
+    end
+end
+
+assign  axi_rready_o = 1'd1;        // the BRAM is always ready
+assign  buf_select_o = buf_select;
+assign  buf_waddr_o  = buf_waddr;
+assign  buf_wdata_o  = buf_wdata;
+assign  buf_valid_o  = buf_valid;
+
+
+// --------------------------------------------------------------------------------------------------
+// AXI address control
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        ddr_rp       <= 32'h00000000;
+        ddr_a_curr   <= 32'h00000000;
+        ddr_b_curr   <= 32'h00000000;
+        ddr_ar_valid <= 1'b0;
+    end else begin
+        if (start_new_tx) begin
+            ddr_rp <= (buf_newready[0] | buf_newready[1]) ? ddr_a_curr : ddr_b_curr;
+        end else if (start_new_burst) begin
+            ddr_rp <= ddr_rp + 32'h80; // 128 bytes (16 qwords) per burst
+        end else begin
+            ddr_rp <= ddr_rp;
+        end
+
+        if (start_new_tx & (buf_newready[0] | buf_newready[1])) begin
+            if (ddr_a_next >= ddr_a_end_i) begin
+                ddr_a_curr <= ddr_a_base_i;
+            end else begin
+                ddr_a_curr <= ddr_a_next;
+            end
+        end else if (ddr_control_i[2]) begin
+            ddr_a_curr <= ddr_a_base_i;
+        end else begin
+            ddr_a_curr <= ddr_a_curr;
+        end
+
+        if (start_new_tx & !(buf_newready[0] | buf_newready[1])) begin
+            if (ddr_b_next >= ddr_b_end_i) begin
+                ddr_b_curr <= ddr_b_base_i;
+            end else begin
+                ddr_b_curr <= ddr_b_next;
+            end
+        end else if (ddr_control_i[3]) begin
+            ddr_b_curr <= ddr_b_base_i;
+        end else begin
+            ddr_b_curr <= ddr_b_curr;
+        end
+
+        if (start_new_tx | start_new_burst) begin
+            ddr_ar_valid <= 1'b1;
+        end else if (ddr_ar_valid & axi_arready_i) begin
+            ddr_ar_valid <= 1'b0;
+        end else begin
+            ddr_ar_valid <= ddr_ar_valid;
+        end
+    end
+end
+
+assign  axi_araddr_o  = ddr_rp;
+assign  axi_arvalid_o = ddr_ar_valid;
+assign  axi_arid_o    = curr_id;
+
+
+// --------------------------------------------------------------------------------------------------
+// AXI ID / outstanding reads control
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        curr_id <= 0;
+    end else begin
+        if (start_new_tx | (tx_in_pr & !buf_end)) begin
+            casex (id_busy)
+            8'b???????0:    begin   curr_id <= 0;       end
+            8'b??????01:    begin   curr_id <= 1;       end
+            8'b?????011:    begin   curr_id <= 2;       end
+            8'b????0111:    begin   curr_id <= 3;       end
+            8'b???01111:    begin   curr_id <= 4;       end
+            8'b??011111:    begin   curr_id <= 5;       end
+            8'b?0111111:    begin   curr_id <= 6;       end
+            8'b01111111:    begin   curr_id <= 7;       end
+            8'b11111111:    begin   curr_id <= curr_id; end
+            endcase
+        end else begin
+            curr_id <= curr_id;
+        end
+    end
+end
+
+// generate ID expiry counter and setup logic
+generate for (CNT=0; CNT<8; CNT=CNT+1) begin
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        id_cnt[CNT*AXI_CW+:AXI_CW]  <= 0;
+        id_addr[CNT*BUF_AW+:BUF_AW] <= {BUF_AW{1'b0}};
+        id_sel_ab[CNT]              <= 1'b0;
+    end else begin
+        if ((start_new_tx | (tx_in_pr & !buf_end)) & (CNT == 0 || &id_busy[CNT-1:0]) & !id_busy[CNT]) begin
+            id_cnt[CNT*AXI_CW+:AXI_CW]  <= AXI_CI;
+            id_addr[CNT*BUF_AW+:BUF_AW] <= buf_wp; // TODO auxiliary signal instead of reg ?
+            id_sel_ab[CNT]              <= buf_sel_ab; // TODO auxiliary signal instead of reg ?
+        end else if (axi_rvalid_i & (axi_rid_i == CNT)) begin
+            if (axi_rlast_i) begin
+                id_cnt[CNT*AXI_CW+:AXI_CW]  <= 0;
+                id_addr[CNT*BUF_AW+:BUF_AW] <= id_addr[CNT*BUF_AW+:BUF_AW];
+            end else begin
+                id_cnt[CNT*AXI_CW+:AXI_CW]  <= AXI_CI;
+                id_addr[CNT*BUF_AW+:BUF_AW] <= id_addr[CNT*BUF_AW+:BUF_AW] + 1;
+            end
+            id_sel_ab[CNT] <= id_sel_ab[CNT];
+        end else begin
+            if (id_busy[CNT]) begin
+                id_cnt[CNT*AXI_CW+:AXI_CW] <= id_cnt[CNT*AXI_CW+:AXI_CW] - 1;
+            end else begin
+                id_cnt[CNT*AXI_CW+:AXI_CW] <= id_cnt[CNT*AXI_CW+:AXI_CW];
+            end
+            id_addr[CNT*BUF_AW+:BUF_AW] <= id_addr[CNT*BUF_AW+:BUF_AW];
+            id_sel_ab[CNT]              <= id_sel_ab[CNT];
+        end
+    end
+end
+end endgenerate
+
+
+endmodule
+
+
+// --------------------------------------------------------------------------------------------------
+//
+//                   AXI DDR Dump
+//
+// --------------------------------------------------------------------------------------------------
+module axi_dump2ddr_master #(
+    parameter   AXI_DW  =  64,          // data width (8,16,...,1024)
+    parameter   AXI_AW  =  32,          // AXI address width
+    parameter   AXI_IW  =   6,          // AXI ID width
+    parameter   AXI_SW  = AXI_DW >> 3,  // AXI strobe width - 1 bit for every data byte
+    parameter   BUF_AW  =   9,          // DDR Dump buffer address width
+    parameter   BUF_CH  =   2           // number of buffered channels
+)(
+    // AXI master write channel
+    output [    AXI_AW-1:0] axi_awaddr_o,
+    output [           1:0] axi_awburst_o,
+    output [           3:0] axi_awcache_o,
+    output [    AXI_IW-1:0] axi_awid_o,
+    output [           3:0] axi_awlen_o,
+    output [           1:0] axi_awlock_o,
+    output [           2:0] axi_awprot_o,
+    output [           3:0] axi_awqos_o,
+    input                   axi_awready_i,
+    output [           2:0] axi_awsize_o,
+    output                  axi_awvalid_o,
+    input  [    AXI_IW-1:0] axi_bid_i,
+    output                  axi_bready_o,
+    input  [           1:0] axi_bresp_i,
+    input                   axi_bvalid_i,
+    output [    AXI_DW-1:0] axi_wdata_o,
+    output [    AXI_IW-1:0] axi_wid_o,
+    output                  axi_wlast_o,
+    input                   axi_wready_i,
+    output [    AXI_SW-1:0] axi_wstrb_o,
+    output                  axi_wvalid_o,
+    // AXI clock & reset
+    input                   axi_clk_i,
+    input                   axi_rstn_i,
+
+    // ADC connection
+    output [    BUF_CH-1:0] buf_select_o,
+    input  [  2*BUF_CH-1:0] buf_ready_i,    // [0]: ChA 0-1k, [1]: ChA 1k-2k, [2]: ChB 0-1k, [3]: ChB 1k-2k
+    output [    BUF_AW-1:0] buf_raddr_o,
+    input  [    AXI_DW-1:0] buf_rdata_i,
+
+    // DDR Dump parameter
+    input       [   32-1:0] ddr_a_base_i,   // DDR Dump ChA buffer base address
+    input       [   32-1:0] ddr_a_end_i,    // DDR Dump ChA buffer end address + 1
+    output      [   32-1:0] ddr_a_curr_o,   // DDR Dump ChA current write address
+    input       [   32-1:0] ddr_b_base_i,   // DDR Dump ChB buffer base address
+    input       [   32-1:0] ddr_b_end_i,    // DDR Dump ChB buffer end address + 1
+    output      [   32-1:0] ddr_b_curr_o,   // DDR Dump ChB current write address
+    input       [    4-1:0] ddr_control_i   // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+);
+
+localparam AXI_CW = 4;      // width of the ID expiry counters
+localparam AXI_CI = 4'hf;   // initial countdown value for the ID expiry counters
+genvar CNT;
+
+
+// --------------------------------------------------------------------------------------------------
+// set fixed transfer settings
 assign  axi_awsize_o  = 3'b011;         // 8 bytes
 assign  axi_awlen_o   = 4'b1111;        // 16 transfers
 assign  axi_awburst_o = 2'b01;          // INCR
@@ -142,204 +461,44 @@ assign  axi_wstrb_o   = 8'b11111111;    // write all bytes
 
 
 // --------------------------------------------------------------------------------------------------
-//
-//                   AXI DDR Slurp
-//
-// --------------------------------------------------------------------------------------------------
-// process ready latches from asg
-reg  [   4-1:0] sbuf_ready;     // asg buffer ready registers Al,Ah,Bl,Bh
-wire [   4-1:0] sbuf_finished;  // signals end of buffer processing Al,Ah,Bl,Bh
-
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        sbuf_ready <= 4'b0000;
-    end else begin
-        if (sbuf_ready_i[0]) begin
-            sbuf_ready[0] <= ddrs_control_i[0];
-        end else if (dbuf_finished[0]) begin
-            sbuf_ready[0] <= 1'b0;
-        end else begin
-            sbuf_ready[0] <= sbuf_ready[0];
-        end
-
-        if (sbuf_ready_i[1]) begin
-            sbuf_ready[1] <= ddrs_control_i[0];
-        end else if (sbuf_finished[1]) begin
-            sbuf_ready[1] <= 1'b0;
-        end else begin
-            sbuf_ready[1] <= sbuf_ready[1];
-        end
-
-        if (sbuf_ready_i[2]) begin
-            sbuf_ready[2] <= ddrs_control_i[1];
-        end else if (sbuf_finished[2]) begin
-            sbuf_ready[2] <= 1'b0;
-        end else begin
-            sbuf_ready[2] <= sbuf_ready[2];
-        end
-
-        if (sbuf_ready_i[3]) begin
-            sbuf_ready[3] <= ddrs_control_i[1];
-        end else if (sbuf_finished[3]) begin
-            sbuf_ready[3] <= 1'b0;
-        end else begin
-            sbuf_ready[3] <= sbuf_ready[3];
-        end
-    end
-end
-
-
-// --------------------------------------------------------------------------------------------------
-// transfer AXI data to BRAM
-reg  [       2-1:0] sbuf_sel;       // select signals for Cha / ChB
-reg                 sbuf_sel_ab;    // stores the currently active channel
-reg  [  SBF_AW-1:0] sbuf_wp;        // BRAM write pointer
-reg  [      32-1:0] s_rp;           // DDR read pointer
-reg  [      32-1:0] s_a_curr;       // DDR ChA current read address
-reg  [      32-1:0] s_b_curr;       // DDR ChB current read address
-reg  [8*AXI_CW-1:0] s_id_cnt;       // read ID expiry counters ID0-7
-reg                 s_tx_in_pr;     // flag buffer transmission in progress
-reg                 s_burst_in_pr;  // flag burst in progress
-reg  [  AXI_IW-1:0] s_curr_id;      // current read ID
-reg                 s_ar_valid;     // flag next read address valid
-
-//assign ddrd_a_curr_o = d_a_curr;
-//assign ddrd_b_curr_o = d_b_curr;
-
-// internal auxiliary signals
-wire [       8-1:0] s_id_busy         = {|s_id_cnt[7*AXI_CW+:AXI_CW],|s_id_cnt[6*AXI_CW+:AXI_CW],|s_id_cnt[5*AXI_CW+:AXI_CW],|s_id_cnt[4*AXI_CW+:AXI_CW],
-                                         |s_id_cnt[3*AXI_CW+:AXI_CW],|s_id_cnt[2*AXI_CW+:AXI_CW],|s_id_cnt[1*AXI_CW+:AXI_CW],|s_id_cnt[0*AXI_CW+:AXI_CW]};
-wire                s_id_free         = (s_id_busy != 8'b11111111);
-wire [      32-1:0] s_a_next          = s_a_curr + (2**SBF_AW)*8;
-wire [      32-1:0] s_b_next          = s_b_curr + (2**SBF_AW)*8;
-wire                s_burst_end       = axi_arready_i & (sbuf_wp[3:0] == 4'b1111);
-wire                sbuf_end          = axi_arready_i & (sbuf_wp[SBF_AW-1:0] == {SBF_AW{1'b1}});
-wire [       4-1:0] sbuf_newready;
-wire                sbuf_pending      = |sbuf_newready;
-wire                s_start_new_tx    = (!s_tx_in_pr | sbuf_end) & s_id_free & sbuf_pending;
-wire                s_start_new_burst = (s_start_new_tx | s_tx_in_pr) & (!s_burst_in_pr | (s_burst_end & sbuf_pending)) & s_id_free;
-wire                s_hold_next_burst = s_burst_end & (!s_id_free | (sbuf_end & !sbuf_pending));
-
-
-// --------------------------------------------------------------------------------------------------
-// AXI ID / outstanding reads control
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        s_curr_id <= 0;
-    end else begin
-        if (s_start_new_tx | (s_burst_in_pr & axi_arready_i & s_burst_end & !s_hold_next_burst) | s_start_new_burst) begin
-            casex (s_id_busy)
-            8'b???????0:    begin   s_curr_id <= 0;         end
-            8'b??????01:    begin   s_curr_id <= 1;         end
-            8'b?????011:    begin   s_curr_id <= 2;         end
-            8'b????0111:    begin   s_curr_id <= 3;         end
-            8'b???01111:    begin   s_curr_id <= 4;         end
-            8'b??011111:    begin   s_curr_id <= 5;         end
-            8'b?0111111:    begin   s_curr_id <= 6;         end
-            8'b01111111:    begin   s_curr_id <= 7;         end
-            8'b11111111:    begin   s_curr_id <= s_curr_id; end
-            endcase
-        end else begin
-            s_curr_id <= s_curr_id;
-        end
-    end
-end
-
-assign  axi_arid_o = s_curr_id;
-
-// generate expiry counter logic
-generate for (CNT=0; CNT<8; CNT=CNT+1) begin: s_expiry_counter if (CNT == 0) begin
-
-// counter 0
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        s_id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
-    end else begin
-        if (!s_id_busy[CNT] & (s_start_new_tx | (s_burst_in_pr & axi_arready_i & s_burst_end & !s_hold_next_burst) | s_start_new_burst)) begin
-            s_id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
-        end else if (axi_rvalid_i & (axi_rid_i == CNT)) begin
-            s_id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
-        end else if (s_id_busy[CNT]) begin
-            if (s_burst_in_pr & (s_curr_id == CNT)) begin
-                s_id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
-            end else begin
-                s_id_cnt[CNT*AXI_CW+:AXI_CW] <= s_id_cnt[CNT*AXI_CW+:AXI_CW] - 1;
-            end
-        end else begin
-            s_id_cnt[CNT*AXI_CW+:AXI_CW] <= s_id_cnt[CNT*AXI_CW+:AXI_CW];
-        end
-    end
-end
-
-end else begin // elsegenerate
-
-// counter x
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        s_id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
-    end else begin
-        if (&s_id_busy[CNT-1:0] & !s_id_busy[CNT] & (s_start_new_tx | (s_burst_in_pr & axi_arready_i & s_burst_end & !s_hold_next_burst) | s_start_new_burst)) begin
-            s_id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
-        end else if (axi_rvalid_i & (axi_rid_i == CNT)) begin
-            s_id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
-        end else if (s_id_busy[CNT]) begin
-            if (s_burst_in_pr & (s_curr_id == CNT)) begin
-                s_id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
-            end else begin
-                s_id_cnt[CNT*AXI_CW+:AXI_CW] <= s_id_cnt[CNT*AXI_CW+:AXI_CW] - 1;
-            end
-        end else begin
-            s_id_cnt[CNT*AXI_CW+:AXI_CW] <= s_id_cnt[CNT*AXI_CW+:AXI_CW];
-        end
-    end
-end
-
-end end endgenerate
-
-
-// --------------------------------------------------------------------------------------------------
-//
-//                   AXI DDR Dump
-//
-// --------------------------------------------------------------------------------------------------
 // process ready latches from scope
-reg  [   4-1:0] dbuf_ready;     // scope buffer ready registers Al,Ah,Bl,Bh
-wire [   4-1:0] dbuf_finished;  // signals end of buffer processing Al,Ah,Bl,Bh
+reg  [   4-1:0] buf_ready;      // scope buffer ready registers Al,Ah,Bl,Bh
+wire [   4-1:0] buf_finished;   // signals end of buffer processing Al,Ah,Bl,Bh
 
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        dbuf_ready <= 4'b0000;
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        buf_ready <= 4'b0000;
     end else begin
-        if (dbuf_ready_i[0]) begin
-            dbuf_ready[0] <= ddrd_control_i[0];
-        end else if (dbuf_finished[0]) begin
-            dbuf_ready[0] <= 1'b0;
+        if (buf_ready_i[0]) begin
+            buf_ready[0] <= ddr_control_i[0];
+        end else if (buf_finished[0]) begin
+            buf_ready[0] <= 1'b0;
         end else begin
-            dbuf_ready[0] <= dbuf_ready[0];
+            buf_ready[0] <= buf_ready[0];
         end
 
-        if (dbuf_ready_i[1]) begin
-            dbuf_ready[1] <= ddrd_control_i[0];
-        end else if (dbuf_finished[1]) begin
-            dbuf_ready[1] <= 1'b0;
+        if (buf_ready_i[1]) begin
+            buf_ready[1] <= ddr_control_i[0];
+        end else if (buf_finished[1]) begin
+            buf_ready[1] <= 1'b0;
         end else begin
-            dbuf_ready[1] <= dbuf_ready[1];
+            buf_ready[1] <= buf_ready[1];
         end
 
-        if (dbuf_ready_i[2]) begin
-            dbuf_ready[2] <= ddrd_control_i[1];
-        end else if (dbuf_finished[2]) begin
-            dbuf_ready[2] <= 1'b0;
+        if (buf_ready_i[2]) begin
+            buf_ready[2] <= ddr_control_i[1];
+        end else if (buf_finished[2]) begin
+            buf_ready[2] <= 1'b0;
         end else begin
-            dbuf_ready[2] <= dbuf_ready[2];
+            buf_ready[2] <= buf_ready[2];
         end
 
-        if (dbuf_ready_i[3]) begin
-            dbuf_ready[3] <= ddrd_control_i[1];
-        end else if (dbuf_finished[3]) begin
-            dbuf_ready[3] <= 1'b0;
+        if (buf_ready_i[3]) begin
+            buf_ready[3] <= ddr_control_i[1];
+        end else if (buf_finished[3]) begin
+            buf_ready[3] <= 1'b0;
         end else begin
-            dbuf_ready[3] <= dbuf_ready[3];
+            buf_ready[3] <= buf_ready[3];
         end
     end
 end
@@ -347,240 +506,214 @@ end
 
 // --------------------------------------------------------------------------------------------------
 // transfer BRAM data to AXI
-reg  [       2-1:0] dbuf_sel;       // select signals for Cha / ChB
-reg                 dbuf_sel_ab;    // stores the currently active channel
-reg  [  DBF_AW-1:0] dbuf_rp;        // BRAM read pointer
-reg  [      32-1:0] d_wp;           // DDR write pointer
-reg  [      32-1:0] d_a_curr;       // DDR ChA current write address
-reg  [      32-1:0] d_b_curr;       // DDR ChB current write address
-reg  [8*AXI_CW-1:0] d_id_cnt;       // write ID expiry counters ID0-7
-reg                 d_tx_in_pr;     // flag buffer transmission in progress
-reg                 d_burst_in_pr;  // flag burst in progress
-reg  [  AXI_IW-1:0] d_curr_id;      // current write ID
-reg                 d_aw_valid;     // flag next write address valid
+reg  [       2-1:0] buf_sel;        // select signals for Cha / ChB
+reg                 buf_sel_ab;     // stores the currently active channel
+reg  [  BUF_AW-1:0] buf_rp;         // BRAM read pointer
+reg  [      32-1:0] ddr_wp;         // DDR write pointer
+reg  [      32-1:0] ddr_a_curr;     // DDR ChA current write address
+reg  [      32-1:0] ddr_b_curr;     // DDR ChB current write address
+reg                 ddr_aw_valid;   // flag next write address valid
+reg  [8*AXI_CW-1:0] id_cnt;         // write ID expiry counters ID0-7
+reg                 tx_in_pr;       // flag buffer transmission in progress
+reg                 burst_in_pr;    // flag burst in progress
+reg  [  AXI_IW-1:0] curr_id;        // current write ID
 
-assign ddrd_a_curr_o = d_a_curr;
-assign ddrd_b_curr_o = d_b_curr;
+assign ddr_a_curr_o = ddr_a_curr;
+assign ddr_b_curr_o = ddr_b_curr;
 
 // internal auxiliary signals
-wire [       8-1:0] d_id_busy         = {|d_id_cnt[7*AXI_CW+:AXI_CW],|d_id_cnt[6*AXI_CW+:AXI_CW],|d_id_cnt[5*AXI_CW+:AXI_CW],|d_id_cnt[4*AXI_CW+:AXI_CW],
-                                         |d_id_cnt[3*AXI_CW+:AXI_CW],|d_id_cnt[2*AXI_CW+:AXI_CW],|d_id_cnt[1*AXI_CW+:AXI_CW],|d_id_cnt[0*AXI_CW+:AXI_CW]};
-wire                d_id_free         = (d_id_busy != 8'b11111111);
-wire [      32-1:0] d_a_next          = d_a_curr + (2**DBF_AW)*8;
-wire [      32-1:0] d_b_next          = d_b_curr + (2**DBF_AW)*8;
-wire                d_burst_end       = axi_wready_i & (dbuf_rp[3:0] == 4'b1111);
-wire                dbuf_end          = axi_wready_i & (dbuf_rp[DBF_AW-1:0] == {DBF_AW{1'b1}});
-wire [       4-1:0] dbuf_newready;
-wire                dbuf_pending      = |dbuf_newready;
-wire                d_start_new_tx    = (!d_tx_in_pr | dbuf_end) & d_id_free & dbuf_pending;
-wire                d_start_new_burst = (d_start_new_tx | d_tx_in_pr) & (!d_burst_in_pr | (d_burst_end & dbuf_pending)) & d_id_free;
-wire                d_hold_next_burst = d_burst_end & (!d_id_free | (dbuf_end & !dbuf_pending));
+wire [       8-1:0] id_busy         = {|id_cnt[7*AXI_CW+:AXI_CW],|id_cnt[6*AXI_CW+:AXI_CW],|id_cnt[5*AXI_CW+:AXI_CW],|id_cnt[4*AXI_CW+:AXI_CW],
+                                       |id_cnt[3*AXI_CW+:AXI_CW],|id_cnt[2*AXI_CW+:AXI_CW],|id_cnt[1*AXI_CW+:AXI_CW],|id_cnt[0*AXI_CW+:AXI_CW]};
+wire                id_free         = (id_busy != 8'b11111111);
+wire [      32-1:0] ddr_a_next      = ddr_a_curr + (2**BUF_AW)*8;
+wire [      32-1:0] ddr_b_next      = ddr_b_curr + (2**BUF_AW)*8;
+wire                burst_end       = axi_wready_i & (buf_rp[3:0] == 4'b1111);
+wire                buf_end         = burst_end & (buf_rp[BUF_AW-1:4] == {BUF_AW-4{1'b1}});
+wire [       4-1:0] buf_newready;
+wire                buf_pending     = |buf_newready;
+wire                start_new_tx    = (!tx_in_pr | buf_end) & id_free & buf_pending;
+wire                start_new_burst = (start_new_tx | tx_in_pr) & (!burst_in_pr | (burst_end & buf_pending)) & id_free;
+wire                hold_next_burst = burst_end & (!id_free | (buf_end & !buf_pending));
 
 // --------------------------------------------------------------------------------------------------
 // transaction and burst control
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        d_tx_in_pr    <= 1'b0;
-        d_burst_in_pr <= 1'b0;
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        tx_in_pr    <= 1'b0;
+        burst_in_pr <= 1'b0;
     end else begin
-        if (d_start_new_tx) begin
-            d_tx_in_pr <= 1'b1;
-        end else if (d_tx_in_pr & dbuf_end & (!d_id_free | !dbuf_pending)) begin
-            d_tx_in_pr <= 1'b0;
+        if (start_new_tx) begin
+            tx_in_pr <= 1'b1;
+        end else if (tx_in_pr & buf_end & (!id_free | !buf_pending)) begin
+            tx_in_pr <= 1'b0;
         end else begin
-            d_tx_in_pr <= d_tx_in_pr;
+            tx_in_pr <= tx_in_pr;
         end
 
-        if (d_start_new_tx | d_start_new_burst) begin
-            d_burst_in_pr <= 1'b1;
-        end else if (d_burst_in_pr & d_hold_next_burst) begin
-            d_burst_in_pr <= 1'b0;
+        if (start_new_tx | start_new_burst) begin
+            burst_in_pr <= 1'b1;
+        end else if (burst_in_pr & hold_next_burst) begin
+            burst_in_pr <= 1'b0;
         end else begin
-            d_burst_in_pr <= d_burst_in_pr;
+            burst_in_pr <= burst_in_pr;
         end
     end
 end
 
-assign  dbuf_finished[0] = d_tx_in_pr & dbuf_end & ({dbuf_sel_ab,dbuf_rp[11]} == 2'b00);
-assign  dbuf_finished[1] = d_tx_in_pr & dbuf_end & ({dbuf_sel_ab,dbuf_rp[11]} == 2'b01);
-assign  dbuf_finished[2] = d_tx_in_pr & dbuf_end & ({dbuf_sel_ab,dbuf_rp[11]} == 2'b10);
-assign  dbuf_finished[3] = d_tx_in_pr & dbuf_end & ({dbuf_sel_ab,dbuf_rp[11]} == 2'b11);
-assign  dbuf_newready[0] = dbuf_ready[0] & !dbuf_finished[0];
-assign  dbuf_newready[1] = dbuf_ready[1] & !dbuf_finished[1];
-assign  dbuf_newready[2] = dbuf_ready[2] & !dbuf_finished[2];
-assign  dbuf_newready[3] = dbuf_ready[3] & !dbuf_finished[3];
+assign  buf_finished[0] = tx_in_pr & buf_end & !buf_sel_ab & !buf_rp[11];
+assign  buf_finished[1] = tx_in_pr & buf_end & !buf_sel_ab &  buf_rp[11];
+assign  buf_finished[2] = tx_in_pr & buf_end &  buf_sel_ab & !buf_rp[11];
+assign  buf_finished[3] = tx_in_pr & buf_end &  buf_sel_ab &  buf_rp[11];
+assign  buf_newready[0] = buf_ready[0] & !buf_finished[0];
+assign  buf_newready[1] = buf_ready[1] & !buf_finished[1];
+assign  buf_newready[2] = buf_ready[2] & !buf_finished[2];
+assign  buf_newready[3] = buf_ready[3] & !buf_finished[3];
 
 
 // --------------------------------------------------------------------------------------------------
 // BRAM control
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        dbuf_sel    <= 2'b00;
-        dbuf_sel_ab <= 1'b0;
-        dbuf_rp     <= {DBF_AW{1'b0}};
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        buf_sel    <= 2'b00;
+        buf_sel_ab <= 1'b0;
+        buf_rp     <= {BUF_AW{1'b0}};
     end else begin
-        if (d_start_new_tx | d_start_new_burst) begin
-            dbuf_sel <= (dbuf_newready[0] | dbuf_newready[1]) ? 2'b01 : 2'b10;
-        end else if (d_burst_in_pr & axi_wready_i & !d_hold_next_burst) begin
-            dbuf_sel <= dbuf_sel_ab ? 2'b10 : 2'b01;
+        if (start_new_tx | start_new_burst) begin
+            buf_sel <= (buf_newready[0] | buf_newready[1]) ? 2'b01 : 2'b10;
+        end else if (burst_in_pr & axi_wready_i & !hold_next_burst) begin
+            buf_sel <= buf_sel_ab ? 2'b10 : 2'b01;
         end else begin
-            dbuf_sel <= 2'b00;
+            buf_sel <= 2'b00;
         end
 
-        if (d_start_new_tx) begin
-            dbuf_rp <= (dbuf_newready[0] | (!dbuf_newready[1] & dbuf_newready[2])) ? {1'b0,{DBF_AW-1{1'b0}}} : {1'b1,{DBF_AW-1{1'b0}}};
-        end else if ((d_burst_in_pr & axi_wready_i & !d_hold_next_burst) | d_start_new_burst) begin
-            dbuf_rp <= dbuf_rp + 1;
+        if (start_new_tx) begin
+            buf_rp <= (buf_newready[0] | (!buf_newready[1] & buf_newready[2])) ? {1'b0,{BUF_AW-1{1'b0}}} : {1'b1,{BUF_AW-1{1'b0}}};
+        end else if ((burst_in_pr & axi_wready_i & !hold_next_burst) | start_new_burst) begin
+            buf_rp <= buf_rp + 1;
         end else begin
-            dbuf_rp <= dbuf_rp;
+            buf_rp <= buf_rp;
         end
 
-        if (d_start_new_tx) begin
-            dbuf_sel_ab <= !(dbuf_newready[0] | dbuf_newready[1]);
+        if (start_new_tx) begin
+            buf_sel_ab <= !(buf_newready[0] | buf_newready[1]);
         end else begin
-            dbuf_sel_ab <= dbuf_sel_ab;
+            buf_sel_ab <= buf_sel_ab;
         end
     end
 end
 
-assign  dbuf_select_o = dbuf_sel;
-assign  dbuf_raddr_o  = dbuf_rp;
+assign  buf_select_o = buf_sel;
+assign  buf_raddr_o  = buf_rp;
 
 
 // --------------------------------------------------------------------------------------------------
 // AXI address control
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        d_wp       <= 32'h00000000;
-        d_a_curr   <= 32'h00000000;
-        d_b_curr   <= 32'h00000000;
-        d_aw_valid <= 1'b0;
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        ddr_wp       <= 32'h00000000;
+        ddr_a_curr   <= 32'h00000000;
+        ddr_b_curr   <= 32'h00000000;
+        ddr_aw_valid <= 1'b0;
     end else begin
-        if (d_start_new_tx) begin
-            d_wp <= (dbuf_newready[0] | dbuf_newready[1]) ? d_a_curr : d_b_curr;
-        end else if ((d_burst_in_pr & axi_wready_i & d_burst_end & !d_hold_next_burst) | d_start_new_burst) begin
-            d_wp <= d_wp + 32'h80; // 128 bytes (16 qwords) per burst
+        if (start_new_tx) begin
+            ddr_wp <= (buf_newready[0] | buf_newready[1]) ? ddr_a_curr : ddr_b_curr;
+        end else if ((burst_in_pr & burst_end & !hold_next_burst) | start_new_burst) begin
+            ddr_wp <= ddr_wp + 32'h80; // 128 bytes (16 qwords) per burst
         end else begin
-            d_wp <= d_wp;
+            ddr_wp <= ddr_wp;
         end
 
-        if (d_start_new_tx & (dbuf_newready[0] | dbuf_newready[1])) begin
-            if (d_a_next >= ddrd_a_end_i) begin
-                d_a_curr <= ddrd_a_base_i;
+        if (start_new_tx & (buf_newready[0] | buf_newready[1])) begin
+            if (ddr_a_next >= ddr_a_end_i) begin
+                ddr_a_curr <= ddr_a_base_i;
             end else begin
-                d_a_curr <= d_a_next;
+                ddr_a_curr <= ddr_a_next;
             end
-        end else if (ddrd_control_i[2]) begin
-            d_a_curr <= ddrd_a_base_i;
+        end else if (ddr_control_i[2]) begin
+            ddr_a_curr <= ddr_a_base_i;
         end else begin
-            d_a_curr <= d_a_curr;
+            ddr_a_curr <= ddr_a_curr;
         end
 
-        if (d_start_new_tx & !(dbuf_newready[0] | dbuf_newready[1])) begin
-            if (d_b_next >= ddrd_b_end_i) begin
-                d_b_curr <= ddrd_b_base_i;
+        if (start_new_tx & !(buf_newready[0] | buf_newready[1])) begin
+            if (ddr_b_next >= ddr_b_end_i) begin
+                ddr_b_curr <= ddr_b_base_i;
             end else begin
-                d_b_curr <= d_b_next;
+                ddr_b_curr <= ddr_b_next;
             end
-        end else if (ddrd_control_i[3]) begin
-            d_b_curr <= ddrd_b_base_i;
+        end else if (ddr_control_i[3]) begin
+            ddr_b_curr <= ddr_b_base_i;
         end else begin
-            d_b_curr <= d_b_curr;
+            ddr_b_curr <= ddr_b_curr;
         end
 
-        if (d_start_new_tx | (d_burst_in_pr & axi_wready_i & d_burst_end & !d_hold_next_burst) | d_start_new_burst) begin
-            d_aw_valid <= 1'b1;
-        end else if (d_aw_valid & axi_awready_i) begin
-            d_aw_valid <= 1'b0;
+        if (start_new_tx | (burst_in_pr & burst_end & !hold_next_burst) | start_new_burst) begin
+            ddr_aw_valid <= 1'b1;
+        end else if (ddr_aw_valid & axi_awready_i) begin
+            ddr_aw_valid <= 1'b0;
         end else begin
-            d_aw_valid <= d_aw_valid;
+            ddr_aw_valid <= ddr_aw_valid;
         end
     end
 end
 
-assign  axi_awaddr_o  = d_wp;
-assign  axi_awvalid_o = d_aw_valid;
-assign  axi_wdata_o   = dbuf_rdata_i;
-assign  axi_wlast_o   = (dbuf_rp[3:0] == 4'b1111); // fixed 16 beat burst
-assign  axi_wvalid_o  = d_burst_in_pr;
+assign  axi_awaddr_o  = ddr_wp;
+assign  axi_awvalid_o = ddr_aw_valid;
+assign  axi_wdata_o   = buf_rdata_i;
+assign  axi_wlast_o   = (buf_rp[3:0] == 4'b1111); // fixed 16 beat burst
+assign  axi_wvalid_o  = burst_in_pr;
 assign  axi_bready_o  = 1'd1;
 
 
 // --------------------------------------------------------------------------------------------------
 // AXI ID / outstanding writes control
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        d_curr_id <= 0;
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        curr_id <= 0;
     end else begin
-        if (d_start_new_tx | (d_burst_in_pr & axi_wready_i & d_burst_end & !d_hold_next_burst) | d_start_new_burst) begin
-            casex (d_id_busy)
-            8'b???????0:    begin   d_curr_id <= 0;         end
-            8'b??????01:    begin   d_curr_id <= 1;         end
-            8'b?????011:    begin   d_curr_id <= 2;         end
-            8'b????0111:    begin   d_curr_id <= 3;         end
-            8'b???01111:    begin   d_curr_id <= 4;         end
-            8'b??011111:    begin   d_curr_id <= 5;         end
-            8'b?0111111:    begin   d_curr_id <= 6;         end
-            8'b01111111:    begin   d_curr_id <= 7;         end
-            8'b11111111:    begin   d_curr_id <= d_curr_id; end
+        if (start_new_tx | (burst_in_pr & burst_end & !hold_next_burst) | start_new_burst) begin
+            casex (id_busy)
+            8'b???????0:    begin   curr_id <= 0;       end
+            8'b??????01:    begin   curr_id <= 1;       end
+            8'b?????011:    begin   curr_id <= 2;       end
+            8'b????0111:    begin   curr_id <= 3;       end
+            8'b???01111:    begin   curr_id <= 4;       end
+            8'b??011111:    begin   curr_id <= 5;       end
+            8'b?0111111:    begin   curr_id <= 6;       end
+            8'b01111111:    begin   curr_id <= 7;       end
+            8'b11111111:    begin   curr_id <= curr_id; end
             endcase
         end else begin
-            d_curr_id <= d_curr_id;
+            curr_id <= curr_id;
         end
     end
 end
 
-assign  axi_awid_o = d_curr_id;
-assign  axi_wid_o  = d_curr_id;
+assign  axi_awid_o = curr_id;
+assign  axi_wid_o  = curr_id;
 
 // generate expiry counter logic
-generate for (CNT=0; CNT<8; CNT=CNT+1) begin: d_expiry_counter if (CNT == 0) begin
-
-// counter 0
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        d_id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
+generate for (CNT=0; CNT<8; CNT=CNT+1) begin
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
     end else begin
-        if (!d_id_busy[CNT] & (d_start_new_tx | (d_burst_in_pr & axi_wready_i & d_burst_end & !d_hold_next_burst) | d_start_new_burst)) begin
-            d_id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
+        if ((start_new_tx | (burst_in_pr & burst_end & !hold_next_burst) | start_new_burst) & (CNT == 0 || &id_busy[CNT-1:0]) & !id_busy[CNT]) begin
+            id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
         end else if (axi_bvalid_i & (axi_bid_i == CNT)) begin
-            d_id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
-        end else if (d_id_busy[CNT]) begin
-            if (d_burst_in_pr & (d_curr_id == CNT)) begin
-                d_id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
+            id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
+        end else if (id_busy[CNT]) begin
+            if (burst_in_pr & (curr_id == CNT)) begin
+                id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
             end else begin
-                d_id_cnt[CNT*AXI_CW+:AXI_CW] <= d_id_cnt[CNT*AXI_CW+:AXI_CW] - 1;
+                id_cnt[CNT*AXI_CW+:AXI_CW] <= id_cnt[CNT*AXI_CW+:AXI_CW] - 1;
             end
         end else begin
-            d_id_cnt[CNT*AXI_CW+:AXI_CW] <= d_id_cnt[CNT*AXI_CW+:AXI_CW];
+            id_cnt[CNT*AXI_CW+:AXI_CW] <= id_cnt[CNT*AXI_CW+:AXI_CW];
         end
     end
 end
-
-end else begin // elsegenerate
-
-// counter x
-always @(posedge buf_clk_i) begin
-    if (!buf_rstn_i) begin
-        d_id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
-    end else begin
-        if (&d_id_busy[CNT-1:0] & !d_id_busy[CNT] & (d_start_new_tx | (d_burst_in_pr & axi_wready_i & d_burst_end & !d_hold_next_burst) | d_start_new_burst)) begin
-            d_id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
-        end else if (axi_bvalid_i & (axi_bid_i == CNT)) begin
-            d_id_cnt[CNT*AXI_CW+:AXI_CW] <= 0;
-        end else if (d_id_busy[CNT]) begin
-            if (d_burst_in_pr & (d_curr_id == CNT)) begin
-                d_id_cnt[CNT*AXI_CW+:AXI_CW] <= AXI_CI;
-            end else begin
-                d_id_cnt[CNT*AXI_CW+:AXI_CW] <= d_id_cnt[CNT*AXI_CW+:AXI_CW] - 1;
-            end
-        end else begin
-            d_id_cnt[CNT*AXI_CW+:AXI_CW] <= d_id_cnt[CNT*AXI_CW+:AXI_CW];
-        end
-    end
-end
-
-end end endgenerate
+end endgenerate
 
 
 endmodule
