@@ -183,6 +183,7 @@ wire [   4-1:0] ddrd_control;   // DDR Dump [0,1]: dump enable flag A/B, [2,3]: 
 // DAC buffer
 wire [   2-1:0] dacbuf_select;  // channel buffer select
 wire [   4-1:0] dacbuf_ready;   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+wire [   4-1:0] dacbuf_close;   // buffer unready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
 wire [  12-1:0] dacbuf_waddr;   // buffer write address
 wire [  64-1:0] dacbuf_wdata;   // buffer write data
 wire            dacbuf_valid;   // buffer data valid
@@ -321,7 +322,7 @@ red_pitaya_ps i_ps
     .adcbuf_raddr_o     (adcbuf_raddr           ),  //
     .adcbuf_rdata_i     (adcbuf_rdata           ),  //
 
-    // DDR Dump parameter export
+    // DDR Dump parameter
     .ddrd_a_base_i  (ddrd_a_base                ),  // DDR Dump ChA buffer base address
     .ddrd_a_end_i   (ddrd_a_end                 ),  // DDR Dump ChA buffer end address + 1
     .ddrd_a_curr_o  (ddrd_a_curr                ),  // DDR Dump ChA current write address
@@ -333,11 +334,12 @@ red_pitaya_ps i_ps
     // DAC data buffer
     .dacbuf_select_o    (dacbuf_select          ),  // buffer select ChA [0] / ChB [1]
     .dacbuf_ready_i     (dacbuf_ready           ),  // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    .dacbuf_close_i     (dacbuf_close           ),  // buffer unready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
     .dacbuf_waddr_o     (dacbuf_waddr           ),  //
     .dacbuf_wdata_o     (dacbuf_wdata           ),  //
     .dacbuf_valid_o     (dacbuf_valid           ),  //
 
-    // DDR Slurp parameter export
+    // DDR Slurp parameter
     .ddrs_a_base_i  (ddrs_a_base                ),  // DDR Slurp ChA buffer base address
     .ddrs_a_end_i   (ddrs_a_end                 ),  // DDR Slurp ChA buffer end address + 1
     .ddrs_b_base_i  (ddrs_b_base                ),  // DDR Slurp ChB buffer base address
@@ -499,7 +501,7 @@ red_pitaya_scope i_scope
   .sys_err_o       (  sys_err[1]                 ),  // error indicator
   .sys_ack_o       (  sys_ack[1]                 ),  // acknowledge signal
 
-    // DDR Dump parameter export
+    // DDR Dump parameter
     .ddr_a_base_o       (ddrd_a_base        ),  // DDR Dump ChA buffer base address
     .ddr_a_end_o        (ddrd_a_end         ),  // DDR Dump ChA buffer end address + 1
     .ddr_a_curr_i       (ddrd_a_curr        ),  // DDR Dump ChA current write address
@@ -551,7 +553,7 @@ red_pitaya_asg i_asg
   .sys_err_o       (  sys_err[2]                 ),  // error indicator
   .sys_ack_o       (  sys_ack[2]                 ),  // acknowledge signal
 
-    // DDR Slurp parameter export
+    // DDR Slurp parameter
     .ddr_a_base_o       (ddrs_a_base        ),  // DDR Slurp ChA buffer base address
     .ddr_a_end_o        (ddrs_a_end         ),  // DDR Slurp ChA buffer end address + 1
     .ddr_b_base_o       (ddrs_b_base        ),  // DDR Slurp ChB buffer base address
@@ -563,6 +565,7 @@ red_pitaya_asg i_asg
     .dacbuf_rstn_i      (frstn[0]           ),  // reset
     .dacbuf_select_i    (dacbuf_select      ),  // channel buffer select
     .dacbuf_ready_o     (dacbuf_ready       ),  // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    .dacbuf_close_o     (dacbuf_close       ),  // buffer unready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
     .dacbuf_waddr_i     (dacbuf_waddr       ),  // buffer write address
     .dacbuf_wdata_i     (dacbuf_wdata       ),  // buffer write data
     .dacbuf_valid_i     (dacbuf_valid       )   // buffer data valid

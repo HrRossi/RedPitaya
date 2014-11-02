@@ -70,9 +70,12 @@ module red_pitaya_asg_ch
     input               dacbuf_rstn_i   ,   // reset
     input               dacbuf_select_i ,   // channel buffer select
     output  [    2-1:0] dacbuf_ready_o  ,   // buffer ready [0]: 0k-8k, [1]: 8k-16k
+    output  [    2-1:0] dacbuf_close_o  ,   // buffer deready [0]: 0k-8k, [1]: 8k-16k
     input   [   12-1:0] dacbuf_waddr_i  ,   // buffer write address
     input   [   64-1:0] dacbuf_wdata_i  ,   // buffer write data
-    input               dacbuf_valid_i      // buffer data valid
+    input               dacbuf_valid_i  ,   // buffer data valid
+    // buffer configuration
+    input   [  RSZ-2:0] dacbuf_rdymx_i      // last read address where it's ok to start filling opposite buffer
 );
 
 
@@ -81,7 +84,7 @@ module red_pitaya_asg_ch
 //
 //  DAC buffer RAM
 
-wire  [  14-1: 0] dac_rdat  ;
+wire  [  16-1: 0] dac_rdat  ;
 reg   [RSZ+15: 0] dac_pnt   ; // read pointer
 
 dac_buffer i_dac_buffer (
@@ -92,21 +95,40 @@ dac_buffer i_dac_buffer (
     .dina   (dacbuf_wdata_i     ),
     .clkb   (dac_clk_i          ),
     .rstb   (!dac_rstn_i        ),
-    .enb    (1'b1 /* todo ? */  ), // the DAC is always ready, isn't it ?
+    .enb    (1'b1               ),
     .addrb  (dac_pnt[16+:RSZ]   ),
-    .doutb  ({2'b00,dac_rdat}   )
+    .doutb  (dac_rdat           )
 );
 
-reg               dac_do    ;
-reg               dac_trig  ;
-wire  [RSZ+16: 0] dac_npnt  ; // next read pointer
-reg   [  28-1: 0] dac_mult  ;
-reg   [  15-1: 0] dac_sum   ;
+(* ASYNC_REG="true" *)  reg     [2:0]   addr_sync;
+(* ASYNC_REG="true" *)  reg     [1:0]   cls0_sync;
+(* ASYNC_REG="true" *)  reg     [1:0]   cls8_sync;
+wire    read_max    = (dac_pnt[16+:RSZ-1] > dacbuf_rdymx_i);
+
+always @(posedge dacbuf_clk_i) begin
+    if (!dacbuf_rstn_i) begin
+        addr_sync <= 3'b000;
+        cls0_sync <= 2'b00;
+        cls8_sync <= 2'b00;
+    end else begin
+        addr_sync <= {addr_sync[1:0],dac_pnt[RSZ-1+16]};
+        cls0_sync <= {cls0_sync[0],!dac_pnt[RSZ-1+16] | read_max};
+        cls8_sync <= {cls8_sync[0], dac_pnt[RSZ-1+16] | read_max};
+    end
+end
+
+assign dacbuf_ready_o[0] = (addr_sync[1] ^ addr_sync[2]) &  addr_sync[1];
+assign dacbuf_ready_o[1] = (addr_sync[1] ^ addr_sync[2]) & !addr_sync[1];
+assign dacbuf_close_o[0] = cls0_sync[1];
+assign dacbuf_close_o[1] = cls8_sync[1];
 
 
 // scale and offset
+reg   [  28-1: 0] dac_mult  ;
+reg   [  15-1: 0] dac_sum   ;
+
 always @(posedge dac_clk_i) begin
-   dac_mult <= $signed(dac_rdat) * $signed({1'b0,set_amp_i}) ;
+   dac_mult <= $signed(dac_rdat[14-1:0]) * $signed({1'b0,set_amp_i}) ;
    dac_sum  <= $signed(dac_mult[28-1:13]) + $signed(set_dc_i) ;
 
    if (set_zero_i)
@@ -126,6 +148,9 @@ end
 //
 //  read pointer & state machine
 
+reg               dac_do    ;
+reg               dac_trig  ;
+wire  [RSZ+16: 0] dac_npnt  ; // next read pointer
 wire              ext_trig_p       ;
 wire              ext_trig_n       ;
 
