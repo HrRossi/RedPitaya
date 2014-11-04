@@ -324,10 +324,10 @@ always @(posedge adcbuf_clk_i) begin
     end
 end
 
-assign adcbuf_ready_o[0] = (addr_sync[1] ^ addr_sync[2]) &  addr_sync[1];
-assign adcbuf_ready_o[1] = (addr_sync[1] ^ addr_sync[2]) & !addr_sync[1];
-assign adcbuf_ready_o[2] = (addr_sync[1] ^ addr_sync[2]) &  addr_sync[1];
-assign adcbuf_ready_o[3] = (addr_sync[1] ^ addr_sync[2]) & !addr_sync[1];
+assign adcbuf_ready_o[0] = !addr_sync[2] &  addr_sync[1];
+assign adcbuf_ready_o[1] =  addr_sync[2] & !addr_sync[1];
+assign adcbuf_ready_o[2] = !addr_sync[2] &  addr_sync[1];
+assign adcbuf_ready_o[3] =  addr_sync[2] & !addr_sync[1];
 
 
 // Write

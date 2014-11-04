@@ -133,11 +133,6 @@ reg               trig_a_sw        ;
 reg   [   3-1: 0] trig_a_src       ;
 wire              trig_a_done      ;
 
-/* legacy */reg buf_a_we;
-/* legacy */reg [RSZ-1:0] buf_a_addr;
-/* legacy */wire [14-1:0] buf_a_rdata;
-/* legacy */wire [RSZ-1:0] buf_a_rpnt;
-/* legacy */reg [32-1:0] buf_a_rpnt_rd;
 
 reg   [RSZ+15: 0] set_b_size       ;
 reg   [RSZ+15: 0] set_b_step       ;
@@ -151,12 +146,6 @@ reg               set_b_zero       ;
 reg               trig_b_sw        ;
 reg   [   3-1: 0] trig_b_src       ;
 wire              trig_b_done      ;
-
-/* legacy */reg buf_b_we;
-/* legacy */reg [RSZ-1:0] buf_b_addr;
-/* legacy */wire [14-1:0] buf_b_rdata;
-/* legacy */wire [RSZ-1:0] buf_b_rpnt;
-/* legacy */reg [32-1:0] buf_b_rpnt_rd;
 
 reg  [ RSZ-2:0] buf_a_rdymx;    // last ChA read address where it's ok to start filling opposite buffer
 reg  [ RSZ-2:0] buf_b_rdymx;    // last ChB read address where it's ok to start filling opposite buffer
@@ -184,12 +173,6 @@ red_pitaya_asg_ch  #(.RSZ ( RSZ ))  i_cha
   .set_amp_i       (  set_a_amp        ),  // set amplitude scale
   .set_dc_i        (  set_a_dc         ),  // set output offset
   .set_zero_i      (  set_a_zero       ),  // set output to zero
-
-/* legacy */.buf_we_i(buf_a_we),
-/* legacy */.buf_addr_i(buf_a_addr),
-/* legacy */.buf_wdata_i(wdata[14-1:0]),
-/* legacy */.buf_rdata_o(buf_a_rdata),
-/* legacy */.buf_rpnt_o(buf_a_rpnt),
 
     // DAC data buffer
     .dacbuf_clk_i       (dacbuf_clk_i           ),  // clock
@@ -229,12 +212,6 @@ red_pitaya_asg_ch  #(.RSZ ( RSZ ))  i_chb
   .set_dc_i        (  set_b_dc         ),  // set output offset
   .set_zero_i      (  set_b_zero       ),  // set output to zero
 
-/* legacy */.buf_we_i(buf_b_we),
-/* legacy */.buf_addr_i(buf_b_addr),
-/* legacy */.buf_wdata_i(wdata[14-1:0]),
-/* legacy */.buf_rdata_o(buf_b_rdata),
-/* legacy */.buf_rpnt_o(buf_b_rpnt),
-
     // DAC data buffer
     .dacbuf_clk_i       (dacbuf_clk_i           ),  // clock
     .dacbuf_rstn_i      (dacbuf_rstn_i          ),  // reset
@@ -249,13 +226,6 @@ red_pitaya_asg_ch  #(.RSZ ( RSZ ))  i_chb
 );
 
 assign trig_out_o = trig_a_done ;
-
-/* legacy */always @(posedge dac_clk_i) begin
-/* legacy */  buf_a_we <= wen && (addr[19:RSZ+2] == 'h1);
-/* legacy */  buf_b_we <= wen && (addr[19:RSZ+2] == 'h2);
-/* legacy */  buf_a_addr <= addr[RSZ+1:2];
-/* legacy */  buf_b_addr <= addr[RSZ+1:2];
-/* legacy */end
 
 //---------------------------------------------------------------------------------
 //
@@ -272,9 +242,6 @@ assign ddr_a_end_o   = ddr_a_end;
 assign ddr_b_base_o  = ddr_b_base;
 assign ddr_b_end_o   = ddr_b_end;
 assign ddr_control_o = ddr_control;
-
-/* legacy */reg [3-1:0] ren_dly;
-/* legacy */reg ack_dly;
 
 always @(posedge dac_clk_i) begin
    if (dac_rstn_i == 1'b0) begin
@@ -307,8 +274,6 @@ always @(posedge dac_clk_i) begin
         ddr_control <= 4'b0000;
         buf_b_rdymx <= {RSZ-1{1'b1}};
         buf_b_rdymx <= {RSZ-1{1'b1}};
-/* legacy */ren_dly <= 3'h0;
-/* legacy */ack_dly <= 1'b0;
    end
    else begin
 
@@ -346,12 +311,6 @@ always @(posedge dac_clk_i) begin
             if (addr[19:0] == 20'h114)  ddr_b_end   <= wdata;
             if (addr[19:0] == 20'h118)  buf_b_rdymx <= wdata[RSZ-2:0];
       end
-/* legacy */if (ren) begin
-/* legacy */  buf_a_rpnt_rd <= {{32-RSZ-2{1'b0}},buf_a_rpnt,2'h0};
-/* legacy */  buf_b_rpnt_rd <= {{32-RSZ-2{1'b0}},buf_b_rpnt,2'h0};
-/* legacy */end
-/* legacy */ren_dly <= {ren_dly[3-2:0],ren};
-/* legacy */ack_dly <= ren_dly[3-1] || wen;
    end
 end
 
