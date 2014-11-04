@@ -54,12 +54,6 @@ module red_pitaya_asg_ch
    input      [  3-1: 0] trig_src_i      ,  //!< trigger source selector
    output                trig_done_o     ,  //!< trigger event
 
-/* legacy */input buf_we_i,
-/* legacy */input [14-1:0] buf_addr_i,
-/* legacy */input [14-1:0] buf_wdata_i,
-/* legacy */output reg [14-1:0] buf_rdata_o,
-/* legacy */output reg [RSZ-1:0] buf_rpnt_o,
-
    // configuration
    input     [RSZ+15: 0] set_size_i      ,  //!< set table data size
    input     [RSZ+15: 0] set_step_i      ,  //!< set pointer step
@@ -90,7 +84,6 @@ module red_pitaya_asg_ch
 //
 //  DAC buffer RAM
 
-/*
 wire  [  16-1: 0] dac_rdat  ;
 reg   [RSZ+15: 0] dac_pnt   ; // read pointer
 
@@ -128,28 +121,6 @@ assign dacbuf_ready_o[0] = (addr_sync[1] ^ addr_sync[2]) &  addr_sync[1];
 assign dacbuf_ready_o[1] = (addr_sync[1] ^ addr_sync[2]) & !addr_sync[1];
 assign dacbuf_close_o[0] = cls0_sync[1];
 assign dacbuf_close_o[1] = cls8_sync[1];
-*/
-
-/* legacy */reg [14-1:0] dac_buf [0:(1<<RSZ)-1];
-/* legacy */reg [14-1:0] dac_rd;
-/* legacy */reg [14-1:0] dac_rdat;
-/* legacy */reg [RSZ-1:0] dac_rp;
-/* legacy */reg [RSZ+15:0] dac_pnt;
-/* legacy */reg dac_do;
-/* legacy */reg dac_trig;
-/* legacy */wire [RSZ+16:0] dac_npnt;
-/* legacy */reg [28-1:0] dac_mult;
-/* legacy */reg [15-1:0] dac_sum;
-/* legacy */always @(posedge dac_clk_i) begin
-/* legacy */  buf_rpnt_o <= dac_pnt[RSZ+15:16];
-/* legacy */  dac_rp <= dac_pnt[RSZ+15:16];
-/* legacy */  dac_rd <= dac_buf[dac_rp];
-/* legacy */  dac_rdat <= dac_rd;
-/* legacy */end
-/* legacy */always @(posedge dac_clk_i) begin
-/* legacy */  if (buf_we_i)
-/* legacy */    dac_buf[buf_addr_i] <= buf_wdata_i[14-1:0];
-/* legacy */end
 
 
 // scale and offset
@@ -177,13 +148,11 @@ end
 //
 //  read pointer & state machine
 
-/*
 reg               dac_do    ;
 reg               dac_trig  ;
 wire  [RSZ+16: 0] dac_npnt  ; // next read pointer
-*/
-/* legacy */wire              ext_trig_p       ;
-/* legacy */wire              ext_trig_n       ;
+wire              ext_trig_p       ;
+wire              ext_trig_n       ;
 
 always @(posedge dac_clk_i) begin
    if (dac_rstn_i == 1'b0) begin

@@ -525,10 +525,10 @@ assign ddr_b_curr_o = ddr_b_curr;
 wire [       8-1:0] id_busy         = {|id_cnt[7*AXI_CW+:AXI_CW],|id_cnt[6*AXI_CW+:AXI_CW],|id_cnt[5*AXI_CW+:AXI_CW],|id_cnt[4*AXI_CW+:AXI_CW],
                                        |id_cnt[3*AXI_CW+:AXI_CW],|id_cnt[2*AXI_CW+:AXI_CW],|id_cnt[1*AXI_CW+:AXI_CW],|id_cnt[0*AXI_CW+:AXI_CW]};
 wire                id_free         = (id_busy != 8'b11111111);
-wire [      32-1:0] ddr_a_next      = ddr_a_curr + (2**BUF_AW)*8;
-wire [      32-1:0] ddr_b_next      = ddr_b_curr + (2**BUF_AW)*8;
+wire [      32-1:0] ddr_a_next      = ddr_a_curr + (2**(BUF_AW-1))*8;
+wire [      32-1:0] ddr_b_next      = ddr_b_curr + (2**(BUF_AW-1))*8;
 wire                burst_end       = axi_wready_i & (buf_rp[3:0] == 4'b1111);
-wire                buf_end         = burst_end & (buf_rp[BUF_AW-1:4] == {BUF_AW-4{1'b1}});
+wire                buf_end         = burst_end & (buf_rp[BUF_AW-2:4] == {BUF_AW-5{1'b1}});
 wire [       4-1:0] buf_newready;
 wire                buf_pending     = |buf_newready;
 wire                start_new_tx    = (!tx_in_pr | buf_end) & id_free & buf_pending;
@@ -560,10 +560,10 @@ always @(posedge axi_clk_i) begin
     end
 end
 
-assign  buf_finished[0] = tx_in_pr & buf_end & !buf_sel_ab & !buf_rp[11];
-assign  buf_finished[1] = tx_in_pr & buf_end & !buf_sel_ab &  buf_rp[11];
-assign  buf_finished[2] = tx_in_pr & buf_end &  buf_sel_ab & !buf_rp[11];
-assign  buf_finished[3] = tx_in_pr & buf_end &  buf_sel_ab &  buf_rp[11];
+assign  buf_finished[0] = tx_in_pr & buf_end & !buf_sel_ab & !buf_rp[BUF_AW-1];
+assign  buf_finished[1] = tx_in_pr & buf_end & !buf_sel_ab &  buf_rp[BUF_AW-1];
+assign  buf_finished[2] = tx_in_pr & buf_end &  buf_sel_ab & !buf_rp[BUF_AW-1];
+assign  buf_finished[3] = tx_in_pr & buf_end &  buf_sel_ab &  buf_rp[BUF_AW-1];
 assign  buf_newready[0] = buf_ready[0] & !buf_finished[0];
 assign  buf_newready[1] = buf_ready[1] & !buf_finished[1];
 assign  buf_newready[2] = buf_ready[2] & !buf_finished[2];
@@ -587,7 +587,7 @@ always @(posedge axi_clk_i) begin
         end
 
         if (start_new_tx) begin
-            buf_rp <= (buf_newready[0] | (!buf_newready[1] & buf_newready[2])) ? {1'b0,{BUF_AW-1{1'b0}}} : {1'b1,{BUF_AW-1{1'b0}}};
+            buf_rp <= {!(buf_newready[0] | (!buf_newready[1] & buf_newready[2])),{BUF_AW-1{1'b0}}};
         end else if ((burst_in_pr & axi_wready_i & !hold_next_burst) | start_new_burst) begin
             buf_rp <= buf_rp + 1;
         end else begin
