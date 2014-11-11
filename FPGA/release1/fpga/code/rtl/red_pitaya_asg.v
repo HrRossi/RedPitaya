@@ -369,11 +369,13 @@ always @(*) begin
      20'h00008 : begin ack <= 1'b1;          rdata <= {{32-RSZ-16{1'b0}},set_a_size}     ; end
      20'h0000C : begin ack <= 1'b1;          rdata <= {{32-RSZ-16{1'b0}},set_a_ofs}      ; end
      20'h00010 : begin ack <= 1'b1;          rdata <= {{32-RSZ-16{1'b0}},set_a_step}     ; end
+/* legacy */20'h00014 : begin ack <= 1'b1;          rdata <= buf_a_rpnt_rd                      ; end
 
      20'h00024 : begin ack <= 1'b1;          rdata <= {2'h0, set_b_dc, 2'h0, set_b_amp}  ; end
      20'h00028 : begin ack <= 1'b1;          rdata <= {{32-RSZ-16{1'b0}},set_b_size}     ; end
      20'h0002C : begin ack <= 1'b1;          rdata <= {{32-RSZ-16{1'b0}},set_b_ofs}      ; end
      20'h00030 : begin ack <= 1'b1;          rdata <= {{32-RSZ-16{1'b0}},set_b_step}     ; end
+/* legacy */20'h00034 : begin ack <= 1'b1;          rdata <= buf_b_rpnt_rd                      ; end
 
     20'h00104:  begin   ack <= 1'b1; rdata <= ddr_a_base;   end
     20'h00108:  begin   ack <= 1'b1; rdata <= ddr_a_end;    end
@@ -386,6 +388,8 @@ always @(*) begin
     20'h00ff4:  begin   ack <= 1'b1; rdata <= SYS_1;        end
     20'h00ff8:  begin   ack <= 1'b1; rdata <= SYS_2;        end
     20'h00ffc:  begin   ack <= 1'b1; rdata <= SYS_3;        end
+/* legacy */20'h1zzzz : begin ack <= ack_dly;       rdata <= {{32-14{1'b0}},buf_a_rdata}        ; end
+/* legacy */20'h2zzzz : begin ack <= ack_dly;       rdata <= {{32-14{1'b0}},buf_b_rdata}        ; end
 
        default : begin ack <= 1'b1;          rdata <=  32'h0                             ; end
    endcase
