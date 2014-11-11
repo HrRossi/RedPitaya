@@ -29,7 +29,6 @@
 #define HK_exp_n_dat_i		0x00000024UL
 #define HK_led_reg		0x00000030UL
 
-
 static struct rpad_device *rpad_setup_hk(const struct rpad_device *dev_temp)
 {
 	struct rpad_hk *hk;

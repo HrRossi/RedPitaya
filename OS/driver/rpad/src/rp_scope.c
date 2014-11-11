@@ -54,7 +54,6 @@
 static unsigned int ddr_minsize = 0x00010000UL;
 static unsigned int ddr_maxsize = 0x00400000UL;
 
-
 /*
  * allocate scope-specific resources:
  * - DMA memory buffers
@@ -174,7 +173,7 @@ static int init_hardware(struct rpad_scope *scope)
 /*
  *
  */
-void stop_hardware(struct rpad_scope *scope)
+static void stop_hardware(struct rpad_scope *scope)
 {
 	if (!scope->hw_init_done)
 		return;

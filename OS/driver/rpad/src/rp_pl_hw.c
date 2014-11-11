@@ -13,7 +13,7 @@
 #include "rp_pl_hw.h"
 #include "rp_hk.h"
 #include "rp_scope.h"
-/*#include "rp_asg.h"*/
+#include "rp_asg.h"
 /*#include "rp_pid.h"*/
 /*#include "rp_ams.h"*/
 /*#include "rp_daisy.h"*/
@@ -31,7 +31,7 @@
 static struct rpad_devtype_data *rpad_devtype_table[NUM_RPAD_TYPES] = {
 	[RPAD_HK_TYPE]		= &rpad_hk_data,
 	[RPAD_SCOPE_TYPE]	= &rpad_scope_data,
-	/*[RPAD_ASG_TYPE]		= &rpad_asg_data,*/
+	[RPAD_ASG_TYPE]		= &rpad_asg_data,
 	/*[RPAD_PID_TYPE]		= &rpad_pid_data,*/
 	/*[RPAD_AMS_TYPE]		= &rpad_ams_data,*/
 	/*[RPAD_DAISY_TYPE]	= &rpad_daisy_data,*/
