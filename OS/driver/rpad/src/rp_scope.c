@@ -51,8 +51,8 @@
 #define SCOPE_ddr_a_curr	0x00000114UL
 #define SCOPE_ddr_b_curr	0x00000118UL
 
-static unsigned int ddr_minsize = 0x00010000UL;
-static unsigned int ddr_maxsize = 0x00400000UL;
+static unsigned int ddrd_minsize = 0x00010000UL;
+static unsigned int ddrd_maxsize = 0x00400000UL;
 
 /*
  * allocate scope-specific resources:
@@ -79,7 +79,7 @@ static struct rpad_device *rpad_setup_scope(const struct rpad_device *dev_temp)
 	//	printk(KERN_WARNING "rpad_scope: no suitable DMA available\n");
 	//	return -ENOMEM;
 	//}
-	for (size = ddr_maxsize; size >= ddr_minsize; size >>= 1) {
+	for (size = ddrd_maxsize; size >= ddrd_minsize; size >>= 1) {
 		printk(KERN_INFO "rpad_scope: trying buffer size %x\n", size);
 		//cpu_addr = dma_alloc_coherent(dev, size, &dma_handle, GFP_DMA);
 		//if (!IS_ERR_OR_NULL(cpu_addr))
@@ -90,7 +90,7 @@ static struct rpad_device *rpad_setup_scope(const struct rpad_device *dev_temp)
 			break;
 	}
 
-	if (size < ddr_minsize) {
+	if (size < ddrd_minsize) {
 		printk(KERN_WARNING "rpad_scope: not enough contiguous memory\n");
 		return ERR_PTR(-ENOMEM);
 	}
@@ -200,6 +200,7 @@ static int rpad_scope_open(struct inode *inodp, struct file *filp)
 		return -ERESTARTSYS;
 
 	retval = init_hardware(scope);
+	scope->resched = 2;
 
 	up(&scope->rp_dev.sem);
 
@@ -267,6 +268,8 @@ static ssize_t rpad_scope_read(struct file *filp,
 			     - scope->ba_phys_addr;
 		}
 		scope->ba_last_curr = curr;
+	} else {
+		curr = scope->ba_last_curr;
 	}
 
 	/* unread data */
@@ -354,5 +357,5 @@ struct rpad_devtype_data rpad_scope_data = {
 /*
  * supported parameters on the insmod command line
  */
-module_param(ddr_minsize, uint, S_IRUGO);
-module_param(ddr_maxsize, uint, S_IRUGO);
+module_param(ddrd_minsize, uint, S_IRUGO);
+module_param(ddrd_maxsize, uint, S_IRUGO);

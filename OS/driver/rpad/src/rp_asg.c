@@ -41,8 +41,8 @@
 #define ASG_ddr_b_end		0x00000114UL
 #define ASG_ddr_b_rdymx		0x00000118UL
 
-static unsigned int ddr_minsize = 0x00010000UL;
-static unsigned int ddr_maxsize = 0x00400000UL;
+static unsigned int ddrs_minsize = 0x00010000UL;
+static unsigned int ddrs_maxsize = 0x00400000UL;
 
 /*
  * allocate asg-specific resources:
@@ -69,7 +69,7 @@ static struct rpad_device *rpad_setup_asg(const struct rpad_device *dev_temp)
 	//	printk(KERN_WARNING "rpad_asg: no suitable DMA available\n");
 	//	return -ENOMEM;
 	//}
-	for (size = ddr_maxsize; size >= ddr_minsize; size >>= 1) {
+	for (size = ddrs_maxsize; size >= ddrs_minsize; size >>= 1) {
 		printk(KERN_INFO "rpad_asg: trying buffer size %x\n", size);
 		//cpu_addr = dma_alloc_coherent(dev, size, &dma_handle, GFP_DMA);
 		//if (!IS_ERR_OR_NULL(cpu_addr))
@@ -80,7 +80,7 @@ static struct rpad_device *rpad_setup_asg(const struct rpad_device *dev_temp)
 			break;
 	}
 
-	if (size < ddr_minsize) {
+	if (size < ddrs_minsize) {
 		printk(KERN_WARNING "rpad_asg: not enough contiguous memory\n");
 		return ERR_PTR(-ENOMEM);
 	}
@@ -219,3 +219,9 @@ struct rpad_devtype_data rpad_asg_data = {
 	.fops		= &rpad_asg_fops,
 	.name		= "asg",
 };
+
+/*
+ * supported parameters on the insmod command line
+ */
+module_param(ddrs_minsize, uint, S_IRUGO);
+module_param(ddrs_maxsize, uint, S_IRUGO);
