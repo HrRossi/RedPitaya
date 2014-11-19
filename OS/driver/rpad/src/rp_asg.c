@@ -99,8 +99,8 @@ static struct rpad_device *rpad_setup_asg(const struct rpad_device *dev_temp)
 	asg->bb_phys_addr = asg->buffer_phys_addr + asg->buffer_size / 2;
 	asg->bb_last_curr = 0UL;
 
-	printk(KERN_INFO "rpad_asg: virt %p\n", (void *)asg->buffer_addr);
-	printk(KERN_INFO "rpad_asg: phys %p\n", (void *)asg->buffer_phys_addr);
+	printk(KERN_INFO "rpad_asg: virt %p phys %p\n",
+	       (void *)asg->buffer_addr, (void *)asg->buffer_phys_addr);
 
 	return &asg->rp_dev;
 }
@@ -177,12 +177,12 @@ static int rpad_asg_open(struct inode *inodp, struct file *filp)
 	asg = container_of(inodp->i_cdev, struct rpad_asg, rp_dev.cdev);
 	filp->private_data = asg;
 
-	if (down_interruptible(&asg->rp_dev.sem))
+	if (mutex_lock_interruptible(&asg->rp_dev.mtx))
 		return -ERESTARTSYS;
 
 	retval = init_hardware(asg);
 
-	up(&asg->rp_dev.sem);
+	mutex_unlock(&asg->rp_dev.mtx);
 
 	return retval;
 }
@@ -196,12 +196,12 @@ static int rpad_asg_release(struct inode *inodp, struct file *filp)
 {
 	struct rpad_asg *asg = (struct rpad_asg *)filp->private_data;
 
-	if (down_interruptible(&asg->rp_dev.sem))
+	if (mutex_lock_interruptible(&asg->rp_dev.mtx))
 		return -ERESTARTSYS;
 
 	stop_hardware(asg);
 
-	up(&asg->rp_dev.sem);
+	mutex_unlock(&asg->rp_dev.mtx);
 
 	return 0;
 }

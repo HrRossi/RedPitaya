@@ -159,7 +159,7 @@ static void rpad_unprepare_device(struct rpad_device *rp_dev)
 }
 
 /*
- * initialize semaphore and char device. register rpad_device's char device with
+ * initialize mutex and char device. register rpad_device's char device with
  * the kernel, making it go live.
  */
 static int rpad_activate_device(struct rpad_device *rp_dev,
@@ -167,7 +167,7 @@ static int rpad_activate_device(struct rpad_device *rp_dev,
 {
 	int ret;
 
-	sema_init(&rp_dev->sem, 1);
+	mutex_init(&rp_dev->mtx);
 
 	cdev_init(&rp_dev->cdev, rp_dev->data->fops);
 	rp_dev->cdev.owner = THIS_MODULE;

@@ -9,7 +9,7 @@
 #define RP_PL_H_
 
 #include <linux/ioport.h>
-#include <linux/semaphore.h>
+#include <linux/mutex.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
 #include <asm/io.h>
@@ -39,7 +39,7 @@ struct rpad_sysconfig {
  * io_base		io cookie to use with ioread/iowrite/...
  * devt			this instance's device number pair
  * data			device specific architecture management data
- * sem			access control
+ * mtx			access control
  * dev			device pointer
  * cdev			character device anchor
  */
@@ -48,7 +48,7 @@ struct rpad_device {
 	void __iomem			*io_base;
 	dev_t				devt;
 	struct rpad_devtype_data	*data;
-	struct semaphore		sem;
+	struct mutex			mtx;
 	struct device			*dev;
 	struct cdev			cdev;
 };

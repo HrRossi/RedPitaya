@@ -109,8 +109,8 @@ static struct rpad_device *rpad_setup_scope(const struct rpad_device *dev_temp)
 	scope->bb_phys_addr = scope->buffer_phys_addr + scope->buffer_size / 2;
 	scope->bb_last_curr = 0UL;
 
-	printk(KERN_INFO "rpad_scope: virt %p\n", (void *)scope->buffer_addr);
-	printk(KERN_INFO "rpad_scope: phys %p\n", (void *)scope->buffer_phys_addr);
+	printk(KERN_INFO "rpad_scope: virt %p phys %p\n",
+	       (void *)scope->buffer_addr, (void *)scope->buffer_phys_addr);
 
 	return &scope->rp_dev;
 }
@@ -196,13 +196,13 @@ static int rpad_scope_open(struct inode *inodp, struct file *filp)
 	scope = container_of(inodp->i_cdev, struct rpad_scope, rp_dev.cdev);
 	filp->private_data = scope;
 
-	if (down_interruptible(&scope->rp_dev.sem))
+	if (mutex_lock_interruptible(&scope->rp_dev.mtx))
 		return -ERESTARTSYS;
 
 	retval = init_hardware(scope);
 	scope->resched = 2;
 
-	up(&scope->rp_dev.sem);
+	mutex_unlock(&scope->rp_dev.mtx);
 
 	return retval;
 }
@@ -216,12 +216,12 @@ static int rpad_scope_release(struct inode *inodp, struct file *filp)
 {
 	struct rpad_scope *scope = (struct rpad_scope *)filp->private_data;
 
-	if (down_interruptible(&scope->rp_dev.sem))
+	if (mutex_lock_interruptible(&scope->rp_dev.mtx))
 		return -ERESTARTSYS;
 
 	stop_hardware(scope);
 
-	up(&scope->rp_dev.sem);
+	mutex_unlock(&scope->rp_dev.mtx);
 
 	return 0;
 }
@@ -242,7 +242,7 @@ static ssize_t rpad_scope_read(struct file *filp,
 	unsigned long curr;
 	unsigned long uoff = *uoffp;
 
-	if (down_interruptible(&scope->rp_dev.sem))
+	if (mutex_lock_interruptible(&scope->rp_dev.mtx))
 		return -ERESTARTSYS;
 
 	/* TODO how to distinguish channel A/B requests ? */
@@ -294,7 +294,7 @@ static ssize_t rpad_scope_read(struct file *filp,
 	*uoffp += size;
 
 out:
-	up(&scope->rp_dev.sem);
+	mutex_unlock(&scope->rp_dev.mtx);
 
 	return size;
 }
@@ -312,13 +312,35 @@ static const struct vm_operations_struct rpad_scope_mmap_mem_ops = {
 };
 
 /*
- * create mapping for IO range of scope, derived from dev/mem code
+ * create mapping for IO range of scope, derived from dev/mem code.
+ * create mappings for DDR buffers.
  */
 static int rpad_scope_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct rpad_scope *scope = (struct rpad_scope *)filp->private_data;
 	size_t size = vma->vm_end - vma->vm_start;
 	resource_size_t addr = vma->vm_pgoff << PAGE_SHIFT;
+
+// FIXME --> this is just a hack to get mmap going quickly. Instead of using
+// addresses 0x00000000 and 0x00200000 as magic numbers, the actual addresses
+// (and sizes) ought to be available through sysfs for userspace to request
+// correct mappings to start with.
+if (addr == 0x00000000) {
+	vma->vm_ops = &rpad_scope_mmap_mem_ops;
+	if (remap_pfn_range(vma, vma->vm_start,
+			    scope->ba_phys_addr >> PAGE_SHIFT, size,
+			    pgprot_noncached(vma->vm_page_prot)))
+		return -EAGAIN;
+	return 0;
+} else if (addr == 0x00200000) {
+	vma->vm_ops = &rpad_scope_mmap_mem_ops;
+	if (remap_pfn_range(vma, vma->vm_start,
+			    scope->bb_phys_addr >> PAGE_SHIFT, size,
+			    pgprot_noncached(vma->vm_page_prot)))
+		return -EAGAIN;
+	return 0;
+}
+// FIXME <-- end of hack
 
 	if (addr        < scope->rp_dev.sys_addr ||
 	    addr + size > scope->rp_dev.sys_addr + RPAD_PL_REGION_SIZE)
