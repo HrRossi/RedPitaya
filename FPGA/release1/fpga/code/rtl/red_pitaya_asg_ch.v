@@ -138,8 +138,6 @@ assign dacbuf_close_o[1] = cls8_sync[1];
 /* legacy */reg dac_do;
 /* legacy */reg dac_trig;
 /* legacy */wire [RSZ+16:0] dac_npnt;
-/* legacy */reg [28-1:0] dac_mult;
-/* legacy */reg [15-1:0] dac_sum;
 /* legacy */always @(posedge dac_clk_i) begin
 /* legacy */  buf_rpnt_o <= dac_pnt[RSZ+15:16];
 /* legacy */  dac_rp <= dac_pnt[RSZ+15:16];

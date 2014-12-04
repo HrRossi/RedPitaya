@@ -85,6 +85,7 @@ module red_pitaya_asg
     output  [   32-1:0] ddr_a_end_o     ,   // DDR Slurp ChA buffer end address + 1
     output  [   32-1:0] ddr_b_base_o    ,   // DDR Slurp ChB buffer base address
     output  [   32-1:0] ddr_b_end_o     ,   // DDR Slurp ChB buffer end address + 1
+    input   [    2-1:0] ddr_status_i    ,   // DDR Slurp status
     output  [    4-1:0] ddr_control_o   ,   // DDR Slurp control
 
     // DAC data buffer
