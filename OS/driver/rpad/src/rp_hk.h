@@ -19,6 +19,6 @@ struct rpad_hk {
 };
 
 /* referenced from rp_pl_hw.c to put into the devtype_data table (see there) */
-extern struct rpad_devtype_data rpad_hk_data;
+struct rpad_devtype_data *rpad_hk_provider(unsigned int version);
 
 #endif /* RP_HK_H_ */

@@ -9,6 +9,7 @@
 #define RP_PL_HW_H_
 
 #include <linux/fs.h>
+#include <linux/interrupt.h>
 
 #include "rp_pl.h"
 
@@ -58,6 +59,7 @@ enum rpad_devtype {
  * teardown	device shutdown function. needs at least to reverse the device
  * 		struct allocation.
  * fops		file operations supported by the device
+ * iops		interrupt handlers of the device
  * private	private data
  * name		component name, like "scope". full name would be "rpad_scope%d"
  */
@@ -66,11 +68,39 @@ struct rpad_devtype_data {
 	struct rpad_device	*(*setup)(const struct rpad_device *dev_temp);
 	void			(*teardown)(struct rpad_device *rp_dev);
 	struct file_operations	*fops;
+	struct irq_handlers	*iops;
 	void			*private;
 	char			*name;
 };
 
+/*
+ * device specific irq configuration
+ * irq[0..3]_id	GIC interrupt ID for interrupt requests 0-3 of the respective
+ * 		sysbus block. 0 denotes no irq connection. the purpose of all
+ * 		configured irqs is device specific.
+ */
+struct rpad_irq_config {
+	int	irq0_id;
+	int	irq1_id;
+	int	irq2_id;
+	int	irq3_id;
+};
+
+/*
+ * ...
+ */
+struct irq_handlers {
+	irq_handler_t	irq0_handler;
+	irq_handler_t	irq1_handler;
+	irq_handler_t	irq2_handler;
+	irq_handler_t	irq3_handler;
+};
+
+typedef struct rpad_devtype_data *(*devtype_provider_t)(unsigned int version);
+
 int rpad_check_sysconfig(struct rpad_sysconfig *sys);
 struct rpad_devtype_data *rpad_get_devtype_data(int region_nr);
+void rpad_get_irq_config(struct rpad_sysconfig *sys, int region_nr,
+                         struct rpad_irq_config *config);
 
 #endif /* RP_PL_HW_H_ */

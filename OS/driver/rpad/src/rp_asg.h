@@ -36,6 +36,6 @@ struct rpad_asg {
 };
 
 /* referenced from rp_pl_hw.c to put into the devtype_data table (see there) */
-extern struct rpad_devtype_data rpad_asg_data;
+struct rpad_devtype_data *rpad_asg_provider(unsigned int version);
 
 #endif /* RP_ASG_H_ */

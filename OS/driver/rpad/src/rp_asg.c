@@ -206,19 +206,33 @@ static int rpad_asg_release(struct inode *inodp, struct file *filp)
 	return 0;
 }
 
+/*
+ * architectural glue to bind the right set of functions to the hardware
+ */
 static struct file_operations rpad_asg_fops = {
 	.owner		= THIS_MODULE,
 	.open		= rpad_asg_open,
 	.release	= rpad_asg_release,
 };
 
-struct rpad_devtype_data rpad_asg_data = {
+static struct rpad_devtype_data rpad_asg_data_v1 = {
 	.type		= RPAD_ASG_TYPE,
 	.setup		= rpad_setup_asg,
 	.teardown	= rpad_teardown_asg,
 	.fops		= &rpad_asg_fops,
+	.iops		= NULL,
 	.name		= "asg",
 };
+
+struct rpad_devtype_data *rpad_asg_provider(unsigned int version)
+{
+	switch (version) {
+	case 1:
+		return &rpad_asg_data_v1;
+	default:
+		return NULL;
+	}
+}
 
 /*
  * supported parameters on the insmod command line

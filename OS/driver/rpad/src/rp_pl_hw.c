@@ -7,6 +7,7 @@
 
 #include <linux/kernel.h>
 #include <linux/ioport.h>
+#include <asm/string.h>
 #include <asm/io.h>
 
 #include "rp_pl.h"
@@ -21,6 +22,7 @@
 /* sysconfig registers */
 #define SYS_id		0x00000000UL
 #define SYS_regions	0x00000004UL
+#define SYS_irq_tab	0x00000100UL /* one 32bit entry per sysbus region */
 
 /*
  * this is the anchor for the recognized functional blocks. if your block
@@ -28,14 +30,14 @@
  * register, this table will be consulted to fetch a set of functions of your
  * choosing to handle the device, along with some other data.
  */
-static struct rpad_devtype_data *rpad_devtype_table[NUM_RPAD_TYPES] = {
-	[RPAD_HK_TYPE]		= &rpad_hk_data,
-	[RPAD_SCOPE_TYPE]	= &rpad_scope_data,
-	[RPAD_ASG_TYPE]		= &rpad_asg_data,
-	/*[RPAD_PID_TYPE]		= &rpad_pid_data,*/
-	/*[RPAD_AMS_TYPE]		= &rpad_ams_data,*/
-	/*[RPAD_DAISY_TYPE]	= &rpad_daisy_data,*/
-	/* add pointer to your struct rpad_devtype_data at the appropriate
+static devtype_provider_t rpad_devtype_table[NUM_RPAD_TYPES] = {
+	[RPAD_HK_TYPE]		= rpad_hk_provider,
+	[RPAD_SCOPE_TYPE]	= rpad_scope_provider,
+	[RPAD_ASG_TYPE]		= rpad_asg_provider,
+	/*[RPAD_PID_TYPE]		= rpad_pid_provider,*/
+	/*[RPAD_AMS_TYPE]		= rpad_ams_provider,*/
+	/*[RPAD_DAISY_TYPE]	= rpad_daisy_provider,*/
+	/* add pointer to your devtype_provider_t function at the appropriate
 	 * enum const slot here. not using enum is discouraged. */
 };
 
@@ -53,22 +55,31 @@ int rpad_check_sysconfig(struct rpad_sysconfig *sys)
 	    sys->nr_of_regions <= 0 || sys->nr_of_regions > 1023)
 		return 0; /* apparently not RPAD PL */
 
-	if (RPAD_VERSION(sys->id) != 1)
+	switch (RPAD_VERSION(sys->id)) {
+	case 1:
+	case 2:
+		break;
+	default:
 		return 0; /* not a supported version */
+	}
 
 	return 1;
 }
 
 /*
- * access the region's SYS_ID register and look up and return the type's data in
- * rpad_devtype_table. this fails if the io memory region cannot be mapped or if
- * the SYS_ID contains an invalid type.
+ * access the region's SYS_ID register and look up and return the data for this
+ * type and version through the provider from rpad_devtype_table. this fails if
+ * the io memory region cannot be mapped or if the SYS_ID contains an invalid
+ * type or an unsupported version.
  */
 struct rpad_devtype_data *rpad_get_devtype_data(int region_nr)
 {
 	resource_size_t start = RPAD_PL_BASE + region_nr * RPAD_PL_REGION_SIZE;
 	void __iomem *base;
+	unsigned int id;
 	unsigned int type;
+	unsigned int version;
+	struct rpad_devtype_data *data;
 
 	if (!request_mem_region(start, RPAD_PL_REGION_SIZE, "rpad_sysconfig"))
 		return ERR_PTR(-EBUSY);
@@ -79,14 +90,52 @@ struct rpad_devtype_data *rpad_get_devtype_data(int region_nr)
 		return ERR_PTR(-EBUSY);
 	}
 
-	type = RPAD_TYPE(ioread32(base + RPAD_SYS_ID));
+	id = ioread32(base + RPAD_SYS_ID);
 
 	iounmap(base);
 	release_mem_region(start, RPAD_PL_REGION_SIZE);
 
+	type = RPAD_TYPE(id);
+	version = RPAD_VERSION(id);
+
 	if (type == RPAD_NO_TYPE || type >= NUM_RPAD_TYPES ||
-	    !rpad_devtype_table[type])
+	    !rpad_devtype_table[type] ||
+	    !(data = rpad_devtype_table[type](version)))
 		return ERR_PTR(-ENXIO);
 
-	return rpad_devtype_table[type];
+	return data;
+}
+
+static int irq_id(unsigned int irq_nr) {
+	if (irq_nr < 8)
+		return 61 + irq_nr;
+	else if (irq_nr < 16)
+		return 84 - 8 + irq_nr;
+	else
+		return 0;
+}
+
+/*
+ * ...
+ */
+void rpad_get_irq_config(struct rpad_sysconfig *sys, int region_nr,
+                         struct rpad_irq_config *config)
+{
+	unsigned int config_word;
+
+	memset(config, 0, sizeof(*config));
+
+	config_word = ioread32(rp_sysa(sys, SYS_irq_tab + 4 * region_nr));
+
+	if (config_word & 0x00080000U)
+		config->irq0_id = irq_id((config_word & 0x0000f000U) >> 12);
+
+	if (config_word & 0x00040000U)
+		config->irq1_id = irq_id((config_word & 0x00000f00U) >> 8);
+
+	if (config_word & 0x00020000U)
+		config->irq2_id = irq_id((config_word & 0x000000f0U) >> 4);
+
+	if (config_word & 0x00010000U)
+		config->irq3_id = irq_id(config_word & 0x0000000fU);
 }

@@ -18,9 +18,9 @@
  * root structure of the RPAD module
  * id			id value read from the PL
  * nr_of_regions	number of system bus regions supported by the PL
- * sys_res		resource pointer for our io allotment
+ * rp_devs		array of rpad_device pointers, indexed by sysbus region
+ * devclass		pointer to the registered rpad device class
  * sys_base		io cookie to use with ioread/iowrite/...
- * sem			access control
  */
 struct rpad_sysconfig {
 	u32			id;

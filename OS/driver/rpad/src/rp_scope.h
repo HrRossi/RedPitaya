@@ -38,6 +38,6 @@ struct rpad_scope {
 };
 
 /* referenced from rp_pl_hw.c to put into the devtype_data table (see there) */
-extern struct rpad_devtype_data rpad_scope_data;
+struct rpad_devtype_data *rpad_scope_provider(unsigned int version);
 
 #endif /* RP_SCOPE_H_ */

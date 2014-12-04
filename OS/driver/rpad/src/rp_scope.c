@@ -43,13 +43,15 @@
 #define SCOPE_b_filt_kk		0x00000048UL
 #define SCOPE_b_filt_pp		0x0000004cUL
 /* DDR Dump extension */
-#define SCOPE_ddr_control	0x00000100UL
+#define SCOPE_ddr_control	0x00000100UL /* read access returns status */
 #define SCOPE_ddr_a_base	0x00000104UL
 #define SCOPE_ddr_a_end		0x00000108UL
 #define SCOPE_ddr_b_base	0x0000010cUL
 #define SCOPE_ddr_b_end		0x00000110UL
 #define SCOPE_ddr_a_curr	0x00000114UL
 #define SCOPE_ddr_b_curr	0x00000118UL
+#define SCOPE_ddr_a_thrsh	0x0000011cUL
+#define SCOPE_ddr_b_thrsh	0x00000120UL
 
 static unsigned int ddrd_minsize = 0x00010000UL;
 static unsigned int ddrd_maxsize = 0x00400000UL;
@@ -69,7 +71,7 @@ static struct rpad_device *rpad_setup_scope(const struct rpad_device *dev_temp)
 	unsigned long cpu_addr;
 	unsigned int size;
 
-	scope = kzalloc(sizeof(struct rpad_scope), GFP_KERNEL);
+	scope = kzalloc(sizeof(*scope), GFP_KERNEL);
 	if (!scope)
 		return ERR_PTR(-ENOMEM);
 
@@ -359,6 +361,9 @@ if (addr == 0x00000000) {
 	return 0;
 }
 
+/*
+ * architectural glue to bind the right set of functions to the hardware
+ */
 static struct file_operations rpad_scope_fops = {
 	.owner		= THIS_MODULE,
 	.open		= rpad_scope_open,
@@ -368,13 +373,42 @@ static struct file_operations rpad_scope_fops = {
 	.mmap		= rpad_scope_mmap,
 };
 
-struct rpad_devtype_data rpad_scope_data = {
+static struct irq_handlers rpad_scope_irq_handlers = {
+	.irq0_handler = NULL, // TODO
+	.irq1_handler = NULL,
+	.irq2_handler = NULL,
+	.irq3_handler = NULL,
+};
+
+static struct rpad_devtype_data rpad_scope_data_v1 = {
 	.type		= RPAD_SCOPE_TYPE,
 	.setup		= rpad_setup_scope,
 	.teardown	= rpad_teardown_scope,
 	.fops		= &rpad_scope_fops,
+	.iops		= NULL,
 	.name		= "scope",
 };
+
+static struct rpad_devtype_data rpad_scope_data_v2 = {
+	.type		= RPAD_SCOPE_TYPE,
+	.setup		= rpad_setup_scope,
+	.teardown	= rpad_teardown_scope,
+	.fops		= &rpad_scope_fops,
+	.iops		= &rpad_scope_irq_handlers,
+	.name		= "scope",
+};
+
+struct rpad_devtype_data *rpad_scope_provider(unsigned int version)
+{
+	switch (version) {
+	case 1:
+		return &rpad_scope_data_v1;
+	case 2:
+		return &rpad_scope_data_v2;
+	default:
+		return NULL;
+	}
+}
 
 /*
  * supported parameters on the insmod command line

@@ -34,7 +34,7 @@ static struct rpad_device *rpad_setup_hk(const struct rpad_device *dev_temp)
 {
 	struct rpad_hk *hk;
 
-	hk = kzalloc(sizeof(struct rpad_hk), GFP_KERNEL);
+	hk = kzalloc(sizeof(*hk), GFP_KERNEL);
 	if (!hk)
 		return ERR_PTR(-ENOMEM);
 
@@ -81,15 +81,29 @@ static int rpad_hk_mmap(struct file *filp, struct vm_area_struct *vma)
 	return 0;
 }
 
+/*
+ * architectural glue to bind the right set of functions to the hardware
+ */
 static struct file_operations rpad_hk_fops = {
 	.owner		= THIS_MODULE,
 	.mmap		= rpad_hk_mmap,
 };
 
-struct rpad_devtype_data rpad_hk_data = {
+static struct rpad_devtype_data rpad_hk_data_v1 = {
 	.type		= RPAD_HK_TYPE,
 	.setup		= rpad_setup_hk,
 	.teardown	= rpad_teardown_hk,
 	.fops		= &rpad_hk_fops,
+	.iops		= NULL,
 	.name		= "hk",
 };
+
+struct rpad_devtype_data *rpad_hk_provider(unsigned int version)
+{
+	switch (version) {
+	case 1:
+		return &rpad_hk_data_v1;
+	default:
+		return NULL;
+	}
+}
