@@ -32,12 +32,16 @@
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
-
 // --------------------------------------------------------------------------------------------------
 //
 //                   AXI DDR Slurp
 //
 // --------------------------------------------------------------------------------------------------
+/*
+ * + version 00001 (asg)
+ * Initial design
+ *
+ */
 module axi_slurpddr_master #(
     parameter   AXI_DW  =  64,  // data width (8,16,...,1024)
     parameter   AXI_AW  =  32,  // AXI address width
@@ -80,6 +84,7 @@ module axi_slurpddr_master #(
     input       [   32-1:0] ddr_a_end_i,    // DDR Slurp ChA buffer end address + 1
     input       [   32-1:0] ddr_b_base_i,   // DDR Slurp ChB buffer base address
     input       [   32-1:0] ddr_b_end_i,    // DDR Slurp ChB buffer end address + 1
+    output      [    2-1:0] ddr_status_o,   // DDR Slurp status
     input       [    4-1:0] ddr_control_i   // DDR Slurp control
 );
 
@@ -150,6 +155,7 @@ reg  [      32-1:0] ddr_rp;             // DDR read pointer
 reg                 ddr_ar_valid;       // DDR read address valid
 reg  [      32-1:0] ddr_a_curr;         // DDR ChA current read address
 reg  [      32-1:0] ddr_b_curr;         // DDR ChB current read address
+reg  [       2-1:0] ddr_status;         // DDR Slurp status
 reg                 buf_sel_ab;         // stores the currently active channel
 reg  [  BUF_AW-1:0] buf_wp;             // BRAM write pointer
 reg  [  AXI_CW-1:0] id_cnt   [8-1:0];   // read ID0-7 expiry counter
@@ -160,6 +166,7 @@ reg  [  AXI_IW-1:0] curr_id;            // current read ID
 
 //assign ddr_a_curr_o = ddr_a_curr;
 //assign ddr_b_curr_o = ddr_b_curr;
+assign ddr_status_o = ddr_status;
 
 // internal auxiliary signals
 wire [       8-1:0] id_busy         = {|id_cnt[7],|id_cnt[6],|id_cnt[5],|id_cnt[4],|id_cnt[3],|id_cnt[2],|id_cnt[1],|id_cnt[0]};
@@ -392,6 +399,15 @@ endmodule
 //                   AXI DDR Dump
 //
 // --------------------------------------------------------------------------------------------------
+/*
+ * + version 00001 (scope)
+ * Initial design
+ *
+ * + version 00002 (scope)
+ * 2014-11-26 Nils Roos <doctor@smart.ms>
+ * Interrupt support, threshold interrupts
+ *
+ */
 module axi_dump2ddr_master #(
     parameter   AXI_DW  =  64,          // data width (8,16,...,1024)
     parameter   AXI_AW  =  32,          // AXI address width
@@ -436,10 +452,15 @@ module axi_dump2ddr_master #(
     input       [   32-1:0] ddr_a_base_i,   // DDR Dump ChA buffer base address
     input       [   32-1:0] ddr_a_end_i,    // DDR Dump ChA buffer end address + 1
     output      [   32-1:0] ddr_a_curr_o,   // DDR Dump ChA current write address
+    input       [   32-1:0] ddr_a_thrsh_i,  // DDR Dump ChA interrupt threshold
     input       [   32-1:0] ddr_b_base_i,   // DDR Dump ChB buffer base address
     input       [   32-1:0] ddr_b_end_i,    // DDR Dump ChB buffer end address + 1
     output      [   32-1:0] ddr_b_curr_o,   // DDR Dump ChB current write address
-    input       [    4-1:0] ddr_control_i   // DDR Dump [0/1]: dump enable flag A/B, [2/3]: reload curr A/B
+    input       [   32-1:0] ddr_b_thrsh_i,  // DDR Dump ChB interrupt threshold
+    output      [    2-1:0] ddr_status_o,   // DDR Dump [0,1]: threshold INT pending A/B
+    input                   ddr_stat_rd_i,  // DDR Dump INT pending was read
+    input       [    6-1:0] ddr_control_i,  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: threshold INT enable A/B
+    output                  ddr_irq0_o      // DDR Dump interrupt request 0
 );
 
 localparam AXI_CW = 4;      // width of the ID expiry counters
@@ -512,6 +533,7 @@ reg  [      32-1:0] ddr_wp;         // DDR write pointer
 reg  [      32-1:0] ddr_a_curr;     // DDR ChA current write address
 reg  [      32-1:0] ddr_b_curr;     // DDR ChB current write address
 reg                 ddr_aw_valid;   // flag next write address valid
+reg  [       2-1:0] ddr_status;     // [0,1] threshold INT pending A/B
 reg  [  AXI_CW-1:0] id_cnt[8-1:0];  // write ID expiry counters ID0-7
 reg                 tx_in_pr;       // flag buffer transmission in progress
 reg                 burst_in_pr;    // flag burst in progress
@@ -519,6 +541,7 @@ reg  [  AXI_IW-1:0] curr_id;        // current write ID
 
 assign ddr_a_curr_o = ddr_a_curr;
 assign ddr_b_curr_o = ddr_b_curr;
+assign ddr_status_o = ddr_status;
 
 // internal auxiliary signals
 wire [       8-1:0] id_busy         = {|id_cnt[7],|id_cnt[6],|id_cnt[5],|id_cnt[4],|id_cnt[3],|id_cnt[2],|id_cnt[1],|id_cnt[0]};
@@ -712,6 +735,44 @@ always @(posedge axi_clk_i) begin
     end
 end
 end endgenerate
+
+
+// --------------------------------------------------------------------------------------------------
+// Interrupt control
+reg     ddr_irq0;
+
+always @(posedge axi_clk_i) begin
+    if (!axi_rstn_i) begin
+        ddr_status <= 2'b00;
+        ddr_irq0   <= 1'b0;
+    end else begin
+        if (ddr_a_curr >= ddr_a_thrsh_i) begin
+            ddr_status[0] <= 1'b1;
+        end else if (ddr_stat_rd_i) begin
+            ddr_status[0] <= 1'b0;
+        end else begin
+            ddr_status[0] <= ddr_status[0];
+        end
+
+        if (ddr_b_curr >= ddr_b_thrsh_i) begin
+            ddr_status[1] <= 1'b1;
+        end else if (ddr_stat_rd_i) begin
+            ddr_status[1] <= 1'b0;
+        end else begin
+            ddr_status[1] <= ddr_status[1];
+        end
+
+        if (ddr_control_i[4] & !ddr_status[0] & (ddr_a_curr >= ddr_a_thrsh_i) | (ddr_control_i[5] & !ddr_status[1] & (ddr_b_curr >= ddr_b_thrsh_i))) begin
+            ddr_irq0 <= 1'b1;
+        end else if (ddr_stat_rd_i) begin
+            ddr_irq0 <= 1'b0;
+        end else begin
+            ddr_irq0 <= ddr_irq0;
+        end
+    end
+end
+
+assign ddr_irq0_o = ddr_irq0;
 
 
 endmodule

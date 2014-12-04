@@ -13,8 +13,14 @@
  * for more details on the language used herein.
  */
 /*
+ * + version 00001
  * 2014-10-15 Nils Roos <doctor@smart.ms>
  * Added infrastructure for ADC data transfer to DDR3 RAM through AXI HP bus
+ * 
+ * + version 00002
+ * 2014-11-26 Nils Roos <doctor@smart.ms>
+ * Interrupt support and subsidiary configuration registers to read from rpad
+ * 
  */
 
  
@@ -128,7 +134,6 @@ module red_pitaya_top
    inout  [ 8-1: 0] exp_p_io           ,
    inout  [ 8-1: 0] exp_n_io           ,
 
-
    // SATA connector
    output [ 2-1: 0] daisy_p_o          ,  // line 1 is clock capable
    output [ 2-1: 0] daisy_n_o          ,
@@ -137,10 +142,9 @@ module red_pitaya_top
 
    // LED
    output [ 8-1: 0] led_o       
-
 );
 
-localparam SYSCONF_ID      = 32'hfff00001; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
+localparam SYSCONF_ID      = 32'hfff00002; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
 localparam SYSCONF_REGIONS = 8; // number of regions supported by the sysbus
 localparam FIRST_FREE      = 6; // index of first region not mapped to a functional block
 localparam SYSR = SYSCONF_REGIONS;
@@ -171,14 +175,19 @@ wire [   4-1:0] adcbuf_ready;   // buffer ready [0]: ChA 0-1k, [1]: ChA 1k-2k, [
 wire [   9-1:0] adcbuf_raddr;   // buffer read address
 wire [  64-1:0] adcbuf_rdata;   // buffer read data
 
-// DDR Dump parameters
+// DDR Dump parameters and signals
 wire [  32-1:0] ddrd_a_base;    // DDR Dump ChA buffer base address
 wire [  32-1:0] ddrd_a_end;     // DDR Dump ChA buffer end address + 1
 wire [  32-1:0] ddrd_a_curr;    // DDR Dump ChA current write address
+wire [  32-1:0] ddrd_a_thrsh;   // DDR Dump ChA interrupt threshold
 wire [  32-1:0] ddrd_b_base;    // DDR Dump ChB buffer base address
 wire [  32-1:0] ddrd_b_end;     // DDR Dump ChB buffer end address + 1
 wire [  32-1:0] ddrd_b_curr;    // DDR Dump ChB current write address
-wire [   4-1:0] ddrd_control;   // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+wire [  32-1:0] ddrd_b_thrsh;   // DDR Dump ChB interrupt threshold
+wire [   2-1:0] ddrd_status;    // DDR Dump [0,1]: threshold INT pending A/B
+wire            ddrd_stat_rd;   // DDR Dump INT pending was read
+wire [   6-1:0] ddrd_control;   // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: threshold INT enable A/B
+wire            ddrd_irq0;      // DDR Dump interrupt request 0
 
 // DAC buffer
 wire [   2-1:0] dacbuf_select;  // channel buffer select
@@ -193,12 +202,16 @@ wire [  32-1:0] ddrs_a_base;    // DDR Slurp ChA buffer base address
 wire [  32-1:0] ddrs_a_end;     // DDR Slurp ChA buffer end address + 1
 wire [  32-1:0] ddrs_b_base;    // DDR Slurp ChB buffer base address
 wire [  32-1:0] ddrs_b_end;     // DDR Slurp ChB buffer end address + 1
+wire [   2-1:0] ddrs_status;    // DDR Slurp status
 wire [   4-1:0] ddrs_control;   // DDR Slurp control
+
+// PL-PS Interrupt lines
+wire [    15:0] irq_f2p;        // ARM GIC ID 91-84,68-61
 
 //---------------------------------------------------------------------------------
 //
 //  system bus decoder & multiplexer
-//  it breaks memory addresses into 8 regions
+//  it breaks memory addresses into SYSR regions
 
 wire                sys_clk    = ps_sys_clk      ;
 wire                sys_rstn   = ps_sys_rstn     ;
@@ -219,7 +232,7 @@ reg             sysconf_cs;
 
 always @(sys_addr) begin
     sys_cs = {SYSR{1'b0}};
-    if (sys_addr[29:20] < SYSCONF_REGIONS) begin
+    if (sys_addr[29:20] < SYSR) begin
         sys_cs[sys_addr[29:20]] = 1'b1;
     end
     sysconf_cs = 1'b0;
@@ -250,6 +263,26 @@ assign sys_err[GV] = 1'b0;
 assign sys_ack[GV] = 1'b1;
 end endgenerate
 
+// PL-PS interrupt assignments
+// 1. assign interrupts from your child modules here 
+// 2. create an interrupt configuration value for your sysbus region number below
+assign irq_f2p[ 0] = 0;             // IRQ0, GIC ID 61
+assign irq_f2p[ 1] = 0;             // IRQ1, GIC ID 62
+assign irq_f2p[ 2] = 0;             // IRQ2, GIC ID 63
+assign irq_f2p[ 3] = 0;             // IRQ3, GIC ID 64
+assign irq_f2p[ 4] = ddrd_irq0;     // DDR Dump interrupt 0 on behalf of scope on IRQ4, GIC ID 65
+assign irq_f2p[ 5] = 0;             // IRQ5, GIC ID 66
+assign irq_f2p[ 6] = 0;             // IRQ6, GIC ID 67
+assign irq_f2p[ 7] = 0;             // IRQ7, GIC ID 68
+assign irq_f2p[ 8] = 0;             // IRQ8, GIC ID 84
+assign irq_f2p[ 9] = 0;             // IRQ9, GIC ID 85
+assign irq_f2p[10] = 0;             // IRQ10, GIC ID 86
+assign irq_f2p[11] = 0;             // IRQ11, GIC ID 87
+assign irq_f2p[12] = 0;             // IRQ12, GIC ID 88
+assign irq_f2p[13] = 0;             // IRQ13, GIC ID 89
+assign irq_f2p[14] = 0;             // IRQ14, GIC ID 90
+assign irq_f2p[15] = 0;             // IRQ15, GIC ID 91
+
 // the sysbus now has some static configuration values that will be queried by the rpad driver
 always @(*) begin
     sysconf_ack <= 1'b1;
@@ -258,6 +291,14 @@ always @(*) begin
     case (sys_addr[19:0])
     20'hf0000:  sysconf_rdata <= SYSCONF_ID;
     20'hf0004:  sysconf_rdata <= SYSCONF_REGIONS;
+
+    // sysbus region interrupt config: up to 4 interrupt lines per region, 0xf0100: region 0, 0xf0104: region 1, ...
+    //                               31              15             0 | w,x,y,z: enable interrupt line 0,1,2,3
+    //                               000000000000wxyzaaaabbbbccccdddd | a,b,c,d: interrupt number (0-15) for line 0,1,2,3
+    //20'hf0100:  sysconf_rdata <= ;
+    20'hf0104:  sysconf_rdata <= 32'b00000000000010000100000000000000; // scope: IRQ4 on line 0
+    //20'hf0108:  sysconf_rdata <= ; ...
+
     default:    sysconf_rdata <= 32'h0;
     endcase
 end
@@ -326,10 +367,15 @@ red_pitaya_ps i_ps
     .ddrd_a_base_i  (ddrd_a_base                ),  // DDR Dump ChA buffer base address
     .ddrd_a_end_i   (ddrd_a_end                 ),  // DDR Dump ChA buffer end address + 1
     .ddrd_a_curr_o  (ddrd_a_curr                ),  // DDR Dump ChA current write address
+    .ddrd_a_thrsh_i (ddrd_a_thrsh               ),  // DDR Dump ChA interrupt threshold
     .ddrd_b_base_i  (ddrd_b_base                ),  // DDR Dump ChB buffer base address
     .ddrd_b_end_i   (ddrd_b_end                 ),  // DDR Dump ChB buffer end address + 1
     .ddrd_b_curr_o  (ddrd_b_curr                ),  // DDR Dump ChB current write address
-    .ddrd_control_i (ddrd_control               ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+    .ddrd_b_thrsh_i (ddrd_b_thrsh               ),  // DDR Dump ChB interrupt threshold
+    .ddrd_status_o  (ddrd_status                ),  // DDR Dump [0,1]: threshold INT pending A/B
+    .ddrd_stat_rd_i (ddrd_stat_rd               ),  // DDR Dump INT pending was read
+    .ddrd_control_i (ddrd_control               ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: threshold INT enable A/B
+    .ddrd_irq0_o    (ddrd_irq0                  ),  // DDR Dump interrupt request 0
 
     // DAC data buffer
     .dacbuf_select_o    (dacbuf_select          ),  // buffer select ChA [0] / ChB [1]
@@ -344,7 +390,11 @@ red_pitaya_ps i_ps
     .ddrs_a_end_i   (ddrs_a_end                 ),  // DDR Slurp ChA buffer end address + 1
     .ddrs_b_base_i  (ddrs_b_base                ),  // DDR Slurp ChB buffer base address
     .ddrs_b_end_i   (ddrs_b_end                 ),  // DDR Slurp ChB buffer end address + 1
-    .ddrs_control_i (ddrs_control               )   // DDR Slurp control
+    .ddrs_status_o  (ddrs_status                ),  // DDR Slurp status
+    .ddrs_control_i (ddrs_control               ),  // DDR Slurp control
+
+    // PL-PS Interrupt lines
+    .irq_f2p        (irq_f2p                    )   // ARM GIC ID 91-84,68-61
 );
 
 
@@ -505,10 +555,14 @@ red_pitaya_scope i_scope
     .ddr_a_base_o       (ddrd_a_base        ),  // DDR Dump ChA buffer base address
     .ddr_a_end_o        (ddrd_a_end         ),  // DDR Dump ChA buffer end address + 1
     .ddr_a_curr_i       (ddrd_a_curr        ),  // DDR Dump ChA current write address
+    .ddr_a_thrsh_o      (ddrd_a_thrsh       ),  // DDR Dump ChA interrupt threshold
     .ddr_b_base_o       (ddrd_b_base        ),  // DDR Dump ChB buffer base address
     .ddr_b_end_o        (ddrd_b_end         ),  // DDR Dump ChB buffer end address + 1
     .ddr_b_curr_i       (ddrd_b_curr        ),  // DDR Dump ChB current write address
-    .ddr_control_o      (ddrd_control       ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+    .ddr_b_thrsh_o      (ddrd_b_thrsh       ),  // DDR Dump ChB interrupt threshold
+    .ddr_status_i       (ddrd_status        ),  // DDR Dump [0,1]: threshold INT pending A/B
+    .ddr_stat_rd_o      (ddrd_stat_rd       ),  // DDR Dump INT pending was read
+    .ddr_control_o      (ddrd_control       ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: threshold INT enable A/B
 
     // ADC data buffer
     .adcbuf_clk_i       (fclk[0]            ),  // clock
@@ -558,6 +612,7 @@ red_pitaya_asg i_asg
     .ddr_a_end_o        (ddrs_a_end         ),  // DDR Slurp ChA buffer end address + 1
     .ddr_b_base_o       (ddrs_b_base        ),  // DDR Slurp ChB buffer base address
     .ddr_b_end_o        (ddrs_b_end         ),  // DDR Slurp ChB buffer end address + 1
+    .ddr_status_i       (ddrs_status        ),  // DDR Slurp status
     .ddr_control_o      (ddrs_control       ),  // DDR Slurp control
 
     // DAC data buffer

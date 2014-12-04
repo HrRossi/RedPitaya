@@ -108,14 +108,19 @@ module red_pitaya_ps
     output [ 9-1:0] adcbuf_raddr_o  ,
     input  [64-1:0] adcbuf_rdata_i  ,
 
-    // DDR Dump parameter
+    // DDR Dump parameters and signals
     input   [   32-1:0] ddrd_a_base_i , // DDR Dump ChA buffer base address
     input   [   32-1:0] ddrd_a_end_i  , // DDR Dump ChA buffer end address + 1
     output  [   32-1:0] ddrd_a_curr_o , // DDR Dump ChA current write address
+    input   [   32-1:0] ddrd_a_thrsh_i, // DDR Dump ChA interrupt threshold
     input   [   32-1:0] ddrd_b_base_i , // DDR Dump ChB buffer base address
     input   [   32-1:0] ddrd_b_end_i  , // DDR Dump ChB buffer end address + 1
     output  [   32-1:0] ddrd_b_curr_o , // DDR Dump ChB current write address
-    input   [    4-1:0] ddrd_control_i, // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+    input   [   32-1:0] ddrd_b_thrsh_i, // DDR Dump ChB interrupt threshold
+    output  [    2-1:0] ddrd_status_o , // DDR Dump [0,1]: threshold INT pending A/B
+    input               ddrd_stat_rd_i, // DDR Dump INT pending was read
+    input   [    6-1:0] ddrd_control_i, // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: threshold INT enable A/B
+    output              ddrd_irq0_o   , // DDR Dump interrupt request 0
 
     // DAC data buffer
     output [   1:0] dacbuf_select_o ,   //
@@ -130,7 +135,11 @@ module red_pitaya_ps
     input   [   32-1:0] ddrs_a_end_i  , // DDR Slurp ChA buffer end address + 1
     input   [   32-1:0] ddrs_b_base_i , // DDR Slurp ChB buffer base address
     input   [   32-1:0] ddrs_b_end_i  , // DDR Slurp ChB buffer end address + 1
-    input   [    4-1:0] ddrs_control_i  // DDR Slurp control
+    output  [    2-1:0] ddrs_status_o , // DDR Slurp status
+    input   [    4-1:0] ddrs_control_i, // DDR Slurp control
+
+    // PL-PS Interrupt lines
+    input   [     15:0] irq_f2p         // ARM GIC ID 91-84,68-61
 );
 
 
@@ -218,7 +227,6 @@ wire            hp0_saxi_wlast;
 wire            hp0_saxi_wready;
 wire [   8-1:0] hp0_saxi_wstrb;
 wire            hp0_saxi_wvalid;
-
 
 assign fclk_rstn_o    = fclk_rstn      ;
 assign gp0_maxi_aclk  = fclk_clk_o[0]  ;
@@ -358,7 +366,25 @@ system_wrapper system_i
     .S_AXI_HP0_wlast    (hp0_saxi_wlast     ),
     .S_AXI_HP0_wready   (hp0_saxi_wready    ),
     .S_AXI_HP0_wstrb    (hp0_saxi_wstrb     ),
-    .S_AXI_HP0_wvalid   (hp0_saxi_wvalid    )
+    .S_AXI_HP0_wvalid   (hp0_saxi_wvalid    ),
+
+    // PL-PS Interrupts
+    .ARM_GIC_ID_61      (irq_f2p[ 0]        ),
+    .ARM_GIC_ID_62      (irq_f2p[ 1]        ),
+    .ARM_GIC_ID_63      (irq_f2p[ 2]        ),
+    .ARM_GIC_ID_64      (irq_f2p[ 3]        ),
+    .ARM_GIC_ID_65      (irq_f2p[ 4]        ),
+    .ARM_GIC_ID_66      (irq_f2p[ 5]        ),
+    .ARM_GIC_ID_67      (irq_f2p[ 6]        ),
+    .ARM_GIC_ID_68      (irq_f2p[ 7]        ),
+    .ARM_GIC_ID_84      (irq_f2p[ 8]        ),
+    .ARM_GIC_ID_85      (irq_f2p[ 9]        ),
+    .ARM_GIC_ID_86      (irq_f2p[10]        ),
+    .ARM_GIC_ID_87      (irq_f2p[11]        ),
+    .ARM_GIC_ID_88      (irq_f2p[12]        ),
+    .ARM_GIC_ID_89      (irq_f2p[13]        ),
+    .ARM_GIC_ID_90      (irq_f2p[14]        ),
+    .ARM_GIC_ID_91      (irq_f2p[15]        )
 );
 
 assign gp0_maxi_arstn = fclk_rstn[0] ;
@@ -492,6 +518,7 @@ axi_slurpddr_master #(
     .ddr_a_end_i    (ddrs_a_end_i       ),
     .ddr_b_base_i   (ddrs_b_base_i      ),
     .ddr_b_end_i    (ddrs_b_end_i       ),
+    .ddr_status_o   (ddrs_status_o      ),
     .ddr_control_i  (ddrs_control_i     )
 );
 
@@ -534,14 +561,19 @@ axi_dump2ddr_master #(
     .buf_raddr_o    (adcbuf_raddr_o     ),  //
     .buf_rdata_i    (adcbuf_rdata_i     ),  //
 
-    // DDR Dump parameter
+    // DDR Dump parameters and signals
     .ddr_a_base_i   (ddrd_a_base_i      ),
     .ddr_a_end_i    (ddrd_a_end_i       ),
     .ddr_a_curr_o   (ddrd_a_curr_o      ),
+    .ddr_a_thrsh_i  (ddrd_a_thrsh_i     ),
     .ddr_b_base_i   (ddrd_b_base_i      ),
     .ddr_b_end_i    (ddrd_b_end_i       ),
     .ddr_b_curr_o   (ddrd_b_curr_o      ),
-    .ddr_control_i  (ddrd_control_i     )
+    .ddr_b_thrsh_i  (ddrd_b_thrsh_i     ),
+    .ddr_status_o   (ddrd_status_o      ),
+    .ddr_stat_rd_i  (ddrd_stat_rd_i     ),
+    .ddr_control_i  (ddrd_control_i     ),
+    .ddr_irq0_o     (ddrd_irq0_o        )
 );
 
 

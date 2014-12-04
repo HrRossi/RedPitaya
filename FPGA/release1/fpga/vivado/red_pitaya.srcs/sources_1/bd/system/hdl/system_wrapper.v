@@ -1,7 +1,7 @@
 //Copyright 1986-2014 Xilinx, Inc. All Rights Reserved.
 //--------------------------------------------------------------------------------
 //Tool Version: Vivado v.2014.2 (win64) Build 928826 Thu Jun  5 18:17:50 MDT 2014
-//Date        : Tue Aug 05 21:01:36 2014
+//Date        : Wed Nov 26 23:39:56 2014
 //Host        : Zock0r running 64-bit Service Pack 1  (build 7601)
 //Command     : generate_target system_wrapper.bd
 //Design      : system_wrapper
@@ -10,7 +10,23 @@
 `timescale 1 ps / 1 ps
 
 module system_wrapper
-   (DDR_addr,
+   (ARM_GIC_ID_61,
+    ARM_GIC_ID_62,
+    ARM_GIC_ID_63,
+    ARM_GIC_ID_64,
+    ARM_GIC_ID_65,
+    ARM_GIC_ID_66,
+    ARM_GIC_ID_67,
+    ARM_GIC_ID_68,
+    ARM_GIC_ID_84,
+    ARM_GIC_ID_85,
+    ARM_GIC_ID_86,
+    ARM_GIC_ID_87,
+    ARM_GIC_ID_88,
+    ARM_GIC_ID_89,
+    ARM_GIC_ID_90,
+    ARM_GIC_ID_91,
+    DDR_addr,
     DDR_ba,
     DDR_cas_n,
     DDR_ck_n,
@@ -129,6 +145,22 @@ module system_wrapper
     S_AXI_HP0_wready,
     S_AXI_HP0_wstrb,
     S_AXI_HP0_wvalid);
+  input [0:0]ARM_GIC_ID_61;
+  input [0:0]ARM_GIC_ID_62;
+  input [0:0]ARM_GIC_ID_63;
+  input [0:0]ARM_GIC_ID_64;
+  input [0:0]ARM_GIC_ID_65;
+  input [0:0]ARM_GIC_ID_66;
+  input [0:0]ARM_GIC_ID_67;
+  input [0:0]ARM_GIC_ID_68;
+  input [0:0]ARM_GIC_ID_84;
+  input [0:0]ARM_GIC_ID_85;
+  input [0:0]ARM_GIC_ID_86;
+  input [0:0]ARM_GIC_ID_87;
+  input [0:0]ARM_GIC_ID_88;
+  input [0:0]ARM_GIC_ID_89;
+  input [0:0]ARM_GIC_ID_90;
+  input [0:0]ARM_GIC_ID_91;
   inout [14:0]DDR_addr;
   inout [2:0]DDR_ba;
   inout DDR_cas_n;
@@ -249,6 +281,22 @@ module system_wrapper
   input [7:0]S_AXI_HP0_wstrb;
   input S_AXI_HP0_wvalid;
 
+  wire [0:0]ARM_GIC_ID_61;
+  wire [0:0]ARM_GIC_ID_62;
+  wire [0:0]ARM_GIC_ID_63;
+  wire [0:0]ARM_GIC_ID_64;
+  wire [0:0]ARM_GIC_ID_65;
+  wire [0:0]ARM_GIC_ID_66;
+  wire [0:0]ARM_GIC_ID_67;
+  wire [0:0]ARM_GIC_ID_68;
+  wire [0:0]ARM_GIC_ID_84;
+  wire [0:0]ARM_GIC_ID_85;
+  wire [0:0]ARM_GIC_ID_86;
+  wire [0:0]ARM_GIC_ID_87;
+  wire [0:0]ARM_GIC_ID_88;
+  wire [0:0]ARM_GIC_ID_89;
+  wire [0:0]ARM_GIC_ID_90;
+  wire [0:0]ARM_GIC_ID_91;
   wire [14:0]DDR_addr;
   wire [2:0]DDR_ba;
   wire DDR_cas_n;
@@ -370,7 +418,23 @@ module system_wrapper
   wire S_AXI_HP0_wvalid;
 
 system system_i
-       (.DDR_addr(DDR_addr),
+       (.ARM_GIC_ID_61(ARM_GIC_ID_61),
+        .ARM_GIC_ID_62(ARM_GIC_ID_62),
+        .ARM_GIC_ID_63(ARM_GIC_ID_63),
+        .ARM_GIC_ID_64(ARM_GIC_ID_64),
+        .ARM_GIC_ID_65(ARM_GIC_ID_65),
+        .ARM_GIC_ID_66(ARM_GIC_ID_66),
+        .ARM_GIC_ID_67(ARM_GIC_ID_67),
+        .ARM_GIC_ID_68(ARM_GIC_ID_68),
+        .ARM_GIC_ID_84(ARM_GIC_ID_84),
+        .ARM_GIC_ID_85(ARM_GIC_ID_85),
+        .ARM_GIC_ID_86(ARM_GIC_ID_86),
+        .ARM_GIC_ID_87(ARM_GIC_ID_87),
+        .ARM_GIC_ID_88(ARM_GIC_ID_88),
+        .ARM_GIC_ID_89(ARM_GIC_ID_89),
+        .ARM_GIC_ID_90(ARM_GIC_ID_90),
+        .ARM_GIC_ID_91(ARM_GIC_ID_91),
+        .DDR_addr(DDR_addr),
         .DDR_ba(DDR_ba),
         .DDR_cas_n(DDR_cas_n),
         .DDR_ck_n(DDR_ck_n),
