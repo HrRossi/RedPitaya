@@ -140,13 +140,14 @@ assign dacbuf_close_o[1] = cls8_sync[1];
 /* legacy */reg [14-1:0] dac_rdat;
 /* legacy */reg [RSZ-1:0] dac_rp;
 /* legacy */reg [RSZ+15:0] dac_pnt;
+reg   [RSZ+15: 0] dac_pntp  ; // previour read pointer
 reg  [  16-1: 0] cyc_cnt      ;
 reg  [  16-1: 0] rep_cnt      ;
 reg  [  32-1: 0] dly_cnt      ;
 reg  [   8-1: 0] dly_tick     ;
 /* legacy */reg dac_do;
 reg              dac_rep      ;
-/* legacy */reg dac_trig;
+/* legacy */wire dac_trig;
 reg              dac_trigr    ;
 /* legacy */wire [RSZ+16:0] dac_npnt;
 /* legacy */always @(posedge dac_clk_i) begin
@@ -186,7 +187,6 @@ end
 //
 //  read pointer & state machine
 
-<<<<<<< HEAD
 /*
 reg               dac_do    ;
 reg               dac_trig  ;
@@ -195,22 +195,6 @@ wire  [RSZ+16: 0] dac_npnt  ; // next read pointer
 reg              trig_in      ;
 /* legacy */wire              ext_trig_p       ;
 /* legacy */wire              ext_trig_n       ;
-=======
-reg              trig_in      ;
-wire             ext_trig_p   ;
-wire             ext_trig_n   ;
-
-reg  [  16-1: 0] cyc_cnt      ;
-reg  [  16-1: 0] rep_cnt      ;
-reg  [  32-1: 0] dly_cnt      ;
-reg  [   8-1: 0] dly_tick     ;
-
-reg              dac_do       ;
-reg              dac_rep      ;
-wire             dac_trig     ;
-reg              dac_trigr    ;
-wire [RSZ+16: 0] dac_npnt     ; // next read pointer
->>>>>>> upstream/master
 
 // state machine
 always @(posedge dac_clk_i) begin
