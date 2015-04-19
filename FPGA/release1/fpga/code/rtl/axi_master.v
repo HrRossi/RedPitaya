@@ -740,13 +740,17 @@ end endgenerate
 // --------------------------------------------------------------------------------------------------
 // Interrupt control
 reg     ddr_irq0;
+reg     ddr_a_prev;
+reg     ddr_b_prev;
 
 always @(posedge axi_clk_i) begin
     if (!axi_rstn_i) begin
         ddr_status <= 2'b00;
         ddr_irq0   <= 1'b0;
+        ddr_a_prev <= 1'b0;
+        ddr_b_prev <= 1'b0;
     end else begin
-        if (ddr_a_curr >= ddr_a_thrsh_i) begin
+        if (ddr_a_curr[1] ^ ddr_a_prev) begin
             ddr_status[0] <= 1'b1;
         end else if (ddr_stat_rd_i) begin
             ddr_status[0] <= 1'b0;
@@ -754,7 +758,7 @@ always @(posedge axi_clk_i) begin
             ddr_status[0] <= ddr_status[0];
         end
 
-        if (ddr_b_curr >= ddr_b_thrsh_i) begin
+        if (ddr_b_curr[1] ^ ddr_b_prev) begin
             ddr_status[1] <= 1'b1;
         end else if (ddr_stat_rd_i) begin
             ddr_status[1] <= 1'b0;
@@ -762,13 +766,17 @@ always @(posedge axi_clk_i) begin
             ddr_status[1] <= ddr_status[1];
         end
 
-        if (ddr_control_i[4] & !ddr_status[0] & (ddr_a_curr >= ddr_a_thrsh_i) | (ddr_control_i[5] & !ddr_status[1] & (ddr_b_curr >= ddr_b_thrsh_i))) begin
+        //if (ddr_control_i[4] & !ddr_status[0] & (ddr_a_curr >= ddr_a_thrsh_i) | (ddr_control_i[5] & !ddr_status[1] & (ddr_b_curr >= ddr_b_thrsh_i))) begin
+        if ((ddr_control_i[4] & !ddr_status[0] & (ddr_a_curr[1] ^ ddr_a_prev)) |
+            (ddr_control_i[5] & !ddr_status[1] & (ddr_b_curr[1] ^ ddr_b_prev))) begin
             ddr_irq0 <= 1'b1;
         end else if (ddr_stat_rd_i) begin
             ddr_irq0 <= 1'b0;
         end else begin
             ddr_irq0 <= ddr_irq0;
         end
+        ddr_a_prev <= ddr_a_curr[1];
+        ddr_b_prev <= ddr_b_curr[1];
     end
 end
 

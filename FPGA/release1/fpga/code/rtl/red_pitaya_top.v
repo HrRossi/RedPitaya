@@ -169,6 +169,9 @@ wire  [ 32-1: 0] ps_sys_rdata       ;
 wire             ps_sys_err         ;
 wire             ps_sys_ack         ;
 
+// Housekeeping GPIO
+wire            gpio_irq0;      // GPIO pin change interrupt request 0
+
 // ADC buffer
 wire [   2-1:0] adcbuf_select;  // channel buffer select
 wire [   4-1:0] adcbuf_ready;   // buffer ready [0]: ChA 0-1k, [1]: ChA 1k-2k, [2]: ChB 0-1k, [3]: ChB 1k-2k
@@ -230,6 +233,9 @@ reg             sysconf_err;
 reg             sysconf_ack;
 reg             sysconf_cs;
 
+//-----------------------------------------------------------------------------
+// control signals sys_cs[], sys_wen[], sys_ren[], sysconf_cs
+
 always @(sys_addr) begin
     sys_cs = {SYSR{1'b0}};
     if (sys_addr[29:20] < SYSR) begin
@@ -244,10 +250,12 @@ end
 assign sys_wen = sys_cs & {SYSR{ps_sys_wen}}  ;
 assign sys_ren = sys_cs & {SYSR{ps_sys_ren}}  ;
 
-// multiplex outputs of the sysregion blocks onto PS sysbus by cs (plus sysconf_cs)
+//-----------------------------------------------------------------------------
+// multiplex outputs of sysregion blocks onto PS sysbus by cs + sysconf_cs
+
 assign ps_sys_err = |(sys_cs & sys_err) | sysconf_cs & sysconf_err;
 assign ps_sys_ack = |(sys_cs & sys_ack) | sysconf_cs & sysconf_ack;
-// arbitrary (but in this case fixed to 32) width by arbitrary number of channels bus multiplexer
+
 wire [SYSR*32-1:0] sys_rdata_s;
 generate for (GV=0; GV<32; GV=GV+1) begin
     for (CNT=0; CNT<SYSR; CNT=CNT+1) begin
@@ -256,16 +264,21 @@ generate for (GV=0; GV<32; GV=GV+1) begin
     assign ps_sys_rdata[GV] = |(sys_cs & sys_rdata_s[GV*SYSR+:SYSR]) | sysconf_cs & sysconf_rdata[GV];
 end endgenerate
 
+//-----------------------------------------------------------------------------
 // generate sane signals for unused regions
+
 generate for (GV=FIRST_FREE; GV<SYSR; GV=GV+1) begin
 assign sys_rdata[GV*32+:32] = 32'h0;
 assign sys_err[GV] = 1'b0;
 assign sys_ack[GV] = 1'b1;
 end endgenerate
 
+//-----------------------------------------------------------------------------
 // PL-PS interrupt assignments
+
 // 1. assign interrupts from your child modules here 
 // 2. create an interrupt configuration value for your sysbus region number below
+
 assign irq_f2p[ 0] = 0;             // IRQ0, GIC ID 61
 assign irq_f2p[ 1] = 0;             // IRQ1, GIC ID 62
 assign irq_f2p[ 2] = 0;             // IRQ2, GIC ID 63
@@ -276,14 +289,14 @@ assign irq_f2p[ 6] = 0;             // IRQ6, GIC ID 67
 assign irq_f2p[ 7] = 0;             // IRQ7, GIC ID 68
 assign irq_f2p[ 8] = 0;             // IRQ8, GIC ID 84
 assign irq_f2p[ 9] = 0;             // IRQ9, GIC ID 85
-assign irq_f2p[10] = 0;             // IRQ10, GIC ID 86
+assign irq_f2p[10] = gpio_irq0;     // GPIO change interrupt 0 on behalf of hk on IRQ10, GIC ID 86
 assign irq_f2p[11] = 0;             // IRQ11, GIC ID 87
 assign irq_f2p[12] = 0;             // IRQ12, GIC ID 88
 assign irq_f2p[13] = 0;             // IRQ13, GIC ID 89
 assign irq_f2p[14] = 0;             // IRQ14, GIC ID 90
 assign irq_f2p[15] = 0;             // IRQ15, GIC ID 91
 
-// the sysbus now has some static configuration values that will be queried by the rpad driver
+// static configuration values of the sysbus that will be queried by the rpad driver
 always @(*) begin
     sysconf_ack <= 1'b1;
     sysconf_err <= 1'b0;
@@ -295,7 +308,7 @@ always @(*) begin
     // sysbus region interrupt config: up to 4 interrupt lines per region, 0xf0100: region 0, 0xf0104: region 1, ...
     //                               31              15             0 | w,x,y,z: enable interrupt line 0,1,2,3
     //                               000000000000wxyzaaaabbbbccccdddd | a,b,c,d: interrupt number (0-15) for line 0,1,2,3
-    //20'hf0100:  sysconf_rdata <= ;
+    20'hf0100:  sysconf_rdata <= 32'b00000000000010001010000000000000; // hk: IRQ10 on line 0
     20'hf0104:  sysconf_rdata <= 32'b00000000000010000100000000000000; // scope: IRQ4 on line 0
     //20'hf0108:  sysconf_rdata <= ; ...
 
@@ -473,7 +486,6 @@ end
 //---------------------------------------------------------------------------------
 //
 //  House Keeping
-
 wire  [  8-1: 0] exp_p_in     ;
 wire  [  8-1: 0] exp_p_out    ;
 wire  [  8-1: 0] exp_p_dir    ;
@@ -488,6 +500,7 @@ red_pitaya_hk i_hk
 
   // LED
   .led_o           (  led_o                      ),  // LED output
+
    // Expansion connector
   .exp_p_dat_i     (  exp_p_in                   ),  // input data
   .exp_p_dat_o     (  exp_p_out                  ),  // output data
@@ -495,6 +508,7 @@ red_pitaya_hk i_hk
   .exp_n_dat_i     (  exp_n_in                   ),
   .exp_n_dat_o     (  exp_n_out                  ),
   .exp_n_dir_o     (  exp_n_dir                  ),
+    .gpio_irq0_o    (gpio_irq0                  ),  // GPIO pin change interrupt request 0
 
    // System bus region 0
   .sys_clk_i       (  sys_clk                    ),  // clock

@@ -22,11 +22,11 @@
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
-        <CompFileExtendedInfo CompFileName="system.bd" FileRelPathName="hdl/system.v"/>
         <CompFileExtendedInfo CompFileName="system.bd" FileRelPathName="hw_handoff/system.hwh"/>
         <CompFileExtendedInfo CompFileName="system.bd" FileRelPathName="ip/system_processing_system7_0_0/system_processing_system7_0_0.xci"/>
         <CompFileExtendedInfo CompFileName="system.bd" FileRelPathName="system_ooc.xdc"/>
         <CompFileExtendedInfo CompFileName="system.bd" FileRelPathName="ip/system_xlconcat_0_0/system_xlconcat_0_0.xci"/>
+        <CompFileExtendedInfo CompFileName="system.bd" FileRelPathName="hdl/system.v"/>
       </File>
       <File Path="$PSRCDIR/sources_1/bd/system/hdl/system_wrapper.v">
         <FileInfo>
