@@ -43,7 +43,8 @@ index 91f4ade..2441420 100644
 +	char *kbuf;
  	int status;
  	unsigned long timeout;
- 	u32 intr_reg, dma_len;
+-	u32 intr_reg;
++	u32 intr_reg, dma_len;
  	dma_addr_t dma_addr;
  	u32 transfer_length = 0;
  	struct xdevcfg_drvdata *drvdata = file->private_data;
