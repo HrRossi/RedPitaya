@@ -6,55 +6,139 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/delay.h>
+#include <linux/ioport.h>
+#include <asm/string.h>
 #include <asm/io.h>
 
 #include "rp_pl.h"
 #include "rp_pl_hw.h"
+#include "rp_hk.h"
+#include "rp_scope.h"
+#include "rp_asg.h"
+/*#include "rp_pid.h"*/
+/*#include "rp_ams.h"*/
+/*#include "rp_daisy.h"*/
+
+/* sysconfig registers */
+#define SYS_id		0x00000000UL
+#define SYS_regions	0x00000004UL
+#define SYS_irq_tab	0x00000100UL /* one 32bit entry per sysbus region */
 
 /*
- * FIXME
- * this is just a one shot test hack. will be replaced soonest with enumeration
- * of the pl resources and device specific driver function.
+ * this is the anchor for the recognized functional blocks. if your block
+ * presents one of the defined enum rpad_devtype values as type in its SYS_ID
+ * register, this table will be consulted to fetch a set of functions of your
+ * choosing to handle the device, along with some other data.
  */
-void test_hardware(struct rpad_device *dev)
+static devtype_provider_t rpad_devtype_table[NUM_RPAD_TYPES] = {
+	[RPAD_HK_TYPE]		= rpad_hk_provider,
+	[RPAD_SCOPE_TYPE]	= rpad_scope_provider,
+	[RPAD_ASG_TYPE]		= rpad_asg_provider,
+	/*[RPAD_PID_TYPE]		= rpad_pid_provider,*/
+	/*[RPAD_AMS_TYPE]		= rpad_ams_provider,*/
+	/*[RPAD_DAISY_TYPE]	= rpad_daisy_provider,*/
+	/* add pointer to your devtype_provider_t function at the appropriate
+	 * enum const slot here. not using enum is discouraged. */
+};
+
+/*
+ * check if the PL can be identified as a supported RPAD configuration.
+ * can be called after sysconfig IO region is mapped.
+ */
+int rpad_check_sysconfig(struct rpad_sysconfig *sys)
 {
-	unsigned int test_a, test_b;
+	sys->id            = ioread32(rp_sysa(sys, SYS_id));
+	sys->nr_of_regions = ioread32(rp_sysa(sys, SYS_regions));
+	/* TODO perhaps also use some checksum or magic nr */
 
-	test_a = ioread32(rp_scope(dev, RPAD_SYS_ID));
-	printk(KERN_ALERT "rpad: ID %x\n", test_a);
+	if (RPAD_TYPE(sys->id) != RPAD_SYS_TYPE ||
+	    sys->nr_of_regions <= 0 || sys->nr_of_regions > 1023)
+		return 0; /* apparently not RPAD PL */
 
-	iowrite32(0x00000002, rp_scope(dev, SCOPE_ctrl)); // reset
-	iowrite32(8, rp_scope(dev, SCOPE_dec));
-	iowrite32(1, rp_scope(dev, SCOPE_avg_en));
+	switch (RPAD_VERSION(sys->id)) {
+	case 1:
+	case 2:
+		break;
+	default:
+		return 0; /* not a supported version */
+	}
 
-	iowrite32(dev->buffer_phys_addr,
-	          rp_scope(dev, SCOPE_ddr_a_base));
-	iowrite32(dev->buffer_phys_addr + dev->buffer_size / 2,
-	          rp_scope(dev, SCOPE_ddr_a_end));
-	iowrite32(dev->buffer_phys_addr + dev->buffer_size / 2,
-	          rp_scope(dev, SCOPE_ddr_b_base));
-	iowrite32(dev->buffer_phys_addr + dev->buffer_size,
-	          rp_scope(dev, SCOPE_ddr_b_end));
-	iowrite32(0x0000000c, rp_scope(dev, SCOPE_ddr_control)); // reload A/B
-	udelay(5);
+	return 1;
+}
 
-	test_a = ioread32(rp_scope(dev, SCOPE_ddr_a_base));
-	test_b = ioread32(rp_scope(dev, SCOPE_ddr_a_end));
-	printk(KERN_ALERT "rpad: A %p - %p\n", (void *)test_a, (void *)test_b);
-	test_a = ioread32(rp_scope(dev, SCOPE_ddr_b_base));
-	test_b = ioread32(rp_scope(dev, SCOPE_ddr_b_end));
-	printk(KERN_ALERT "rpad: B %p - %p\n", (void *)test_a, (void *)test_b);
+/*
+ * access the region's SYS_ID register and look up and return the data for this
+ * type and version through the provider from rpad_devtype_table. this fails if
+ * the io memory region cannot be mapped or if the SYS_ID contains an invalid
+ * type or an unsupported version.
+ */
+struct rpad_devtype_data *rpad_get_devtype_data(int region_nr,
+                                                struct hw_config *hw)
+{
+	resource_size_t start = RPAD_PL_BASE + region_nr * RPAD_PL_REGION_SIZE;
+	void __iomem *base;
+	unsigned int type;
+	unsigned int version;
+	struct rpad_devtype_data *data;
 
-	iowrite32(0x00000003, rp_scope(dev, SCOPE_ddr_control)); // enable A/B
-	iowrite32(0x00000001, rp_scope(dev, SCOPE_ctrl)); // arm
+	if (!request_mem_region(start, RPAD_PL_REGION_SIZE, "rpad_sysconfig"))
+		return ERR_PTR(-EBUSY);
 
-	test_b = dev->buffer_phys_addr + dev->buffer_size / 2 - 0x00004000;
-	do {
-		test_a = ioread32(rp_scope(dev, SCOPE_ddr_a_curr));
-	} while (test_a < test_b);
+	base = ioremap_nocache(start, RPAD_PL_REGION_SIZE);
+	if (!base) {
+		release_mem_region(start, RPAD_PL_REGION_SIZE);
+		return ERR_PTR(-EBUSY);
+	}
 
-	iowrite32(0x00000002, rp_scope(dev, SCOPE_ctrl)); // reset
-	iowrite32(0x00000000, rp_scope(dev, SCOPE_ddr_control));
-	printk(KERN_ALERT "rpad: acquisition complete\n");
+	hw->id    = ioread32(base + RPAD_SYS_ID);
+	hw->sys_1 = ioread32(base + RPAD_SYS_1);
+	hw->sys_2 = ioread32(base + RPAD_SYS_2);
+	hw->sys_3 = ioread32(base + RPAD_SYS_3);
+
+	iounmap(base);
+	release_mem_region(start, RPAD_PL_REGION_SIZE);
+
+	type = RPAD_TYPE(hw->id);
+	version = RPAD_VERSION(hw->id);
+
+	if (type == RPAD_NO_TYPE || type >= NUM_RPAD_TYPES ||
+	    !rpad_devtype_table[type] ||
+	    !(data = rpad_devtype_table[type](version)))
+		return ERR_PTR(-ENXIO);
+
+	return data;
+}
+
+static int irq_id(unsigned int irq_nr) {
+	if (irq_nr < 8)
+		return 61 + irq_nr;
+	else if (irq_nr < 16)
+		return 84 + irq_nr - 8;
+	else
+		return 0;
+}
+
+/*
+ * reads the interrupt configuration from the sysconfig IO region.
+ */
+void rpad_get_irq_config(struct rpad_sysconfig *sys, int region_nr,
+                         struct rpad_irq_config *config)
+{
+	unsigned int config_word;
+
+	memset(config, 0, sizeof(*config));
+
+	config_word = ioread32(rp_sysa(sys, SYS_irq_tab + 4 * region_nr));
+
+	if (config_word & 0x00080000U)
+		config->irq0_id = irq_id((config_word & 0x0000f000U) >> 12);
+
+	if (config_word & 0x00040000U)
+		config->irq1_id = irq_id((config_word & 0x00000f00U) >> 8);
+
+	if (config_word & 0x00020000U)
+		config->irq2_id = irq_id((config_word & 0x000000f0U) >> 4);
+
+	if (config_word & 0x00010000U)
+		config->irq3_id = irq_id(config_word & 0x0000000fU);
 }
