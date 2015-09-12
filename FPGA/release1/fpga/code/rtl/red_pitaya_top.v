@@ -167,89 +167,33 @@ wire  [ 32-1: 0] ps_sys_rdata       ;
 wire             ps_sys_err         ;
 wire             ps_sys_ack         ;
 
-// ADC buffer
-wire [   2-1:0] adcbuf_select;  // channel buffer select
-wire [   4-1:0] adcbuf_ready;   // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
-wire [   9-1:0] adcbuf_raddr;   // buffer read address
-wire [  64-1:0] adcbuf_rdata;   // buffer read data
+// AXI0 master
+wire             axi0_clk           ;
+wire             axi0_rstn          ;
+wire  [ 32-1: 0] axi0_waddr         ;
+wire  [ 64-1: 0] axi0_wdata         ;
+wire  [  8-1: 0] axi0_wsel          ;
+wire             axi0_wvalid        ;
+wire  [  4-1: 0] axi0_wlen          ;
+wire             axi0_wfixed        ;
+wire             axi0_werr          ;
+wire             axi0_wrdy          ;
+wire             axi0_rstn_ps       ;
 
-// DDR Dump parameters
-wire [  32-1:0] ddr_a_base;     // DDR ChA buffer base address
-wire [  32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
-wire [  32-1:0] ddr_a_curr;     // DDR ChA current write address
-wire [  32-1:0] ddr_b_base;     // DDR ChB buffer base address
-wire [  32-1:0] ddr_b_end;      // DDR ChB buffer end address + 1
-wire [  32-1:0] ddr_b_curr;     // DDR ChB current write address
-wire [   4-1:0] ddr_control;    // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+// AXI1 master
+wire             axi1_clk           ;
+wire             axi1_rstn          ;
+wire  [ 32-1: 0] axi1_waddr         ;
+wire  [ 64-1: 0] axi1_wdata         ;
+wire  [  8-1: 0] axi1_wsel          ;
+wire             axi1_wvalid        ;
+wire  [  4-1: 0] axi1_wlen          ;
+wire             axi1_wfixed        ;
+wire             axi1_werr          ;
+wire             axi1_wrdy          ;
+wire             axi1_rstn_ps       ;
 
-//---------------------------------------------------------------------------------
-//
-//  system bus decoder & multiplexer
-//  it breaks memory addresses into 8 regions
-
-wire                sys_clk    = ps_sys_clk      ;
-wire                sys_rstn   = ps_sys_rstn     ;
-wire  [    32-1: 0] sys_addr   = ps_sys_addr     ;
-wire  [    32-1: 0] sys_wdata  = ps_sys_wdata    ;
-wire  [     4-1: 0] sys_sel    = ps_sys_sel      ;
-wire  [     SYSR-1: 0] sys_wen    ;
-wire  [     SYSR-1: 0] sys_ren    ;
-wire  [(SYSR*32)-1: 0] sys_rdata  ;
-wire  [ (SYSR*1)-1: 0] sys_err    ;
-wire  [ (SYSR*1)-1: 0] sys_ack    ;
-reg   [     SYSR-1: 0] sys_cs     ;
-
-reg  [  32-1:0] sysconf_rdata;
-reg             sysconf_err;
-reg             sysconf_ack;
-reg             sysconf_cs;
-
-always @(sys_addr) begin
-    sys_cs = {SYSR{1'b0}};
-    if (sys_addr[29:20] < SYSCONF_REGIONS) begin
-        sys_cs[sys_addr[29:20]] = 1'b1;
-    end
-    sysconf_cs = 1'b0;
-    if (sys_addr[29:20] == 10'h3ff) begin
-        sysconf_cs = 1'b1;
-    end
-end
-
-assign sys_wen = sys_cs & {SYSR{ps_sys_wen}}  ;
-assign sys_ren = sys_cs & {SYSR{ps_sys_ren}}  ;
-
-// multiplex outputs of the sysregion blocks onto PS sysbus by cs (plus sysconf_cs)
-assign ps_sys_err = |(sys_cs & sys_err) | sysconf_cs & sysconf_err;
-assign ps_sys_ack = |(sys_cs & sys_ack) | sysconf_cs & sysconf_ack;
-// arbitrary (but in this case fixed to 32) width by arbitrary number of channels bus multiplexer
-wire [SYSR*32-1:0] sys_rdata_s;
-generate for (GV=0; GV<32; GV=GV+1) begin
-    for (CNT=0; CNT<SYSR; CNT=CNT+1) begin
-        assign sys_rdata_s[GV*SYSR+CNT] = sys_rdata[CNT*32+GV]; // reshuffle to align with sys_cs per bitline
-    end
-    assign ps_sys_rdata[GV] = |(sys_cs & sys_rdata_s[GV*SYSR+:SYSR]) | sysconf_cs & sysconf_rdata[GV];
-end endgenerate
-
-// generate sane signals for unused regions
-generate for (GV=FIRST_FREE; GV<SYSR; GV=GV+1) begin
-assign sys_rdata[GV*32+:32] = 32'h0;
-assign sys_err[GV] = 1'b0;
-assign sys_ack[GV] = 1'b1;
-end endgenerate
-
-// the sysbus now has some static configuration values that will be queried by the rpad driver
-always @(*) begin
-    sysconf_ack <= 1'b1;
-    sysconf_err <= 1'b0;
-
-    case (sys_addr[19:0])
-    20'hf0000:  sysconf_rdata <= SYSCONF_ID;
-    20'hf0004:  sysconf_rdata <= SYSCONF_REGIONS;
-    default:    sysconf_rdata <= 32'h0;
-    endcase
-end
-
-
+  
 red_pitaya_ps i_ps
 (
   .FIXED_IO_mio       (  FIXED_IO_mio                ),
@@ -303,20 +247,31 @@ red_pitaya_ps i_ps
   .spi_mosi_i      (  1'b0               ),  // master out slave in
   .spi_miso_o      (                     ),  // master in slave out
 
-    // ADC data buffer
-    .adcbuf_select_o    (adcbuf_select          ),  // buffer select ChA [0] / ChB [1]
-    .adcbuf_ready_i     (adcbuf_ready           ),  // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
-    .adcbuf_raddr_o     (adcbuf_raddr           ),  //
-    .adcbuf_rdata_i     (adcbuf_rdata           ),  //
+   // AXI0 master
+  .axi0_clk_i      (  axi0_clk           ),  // global clock
+  .axi0_rstn_i     (  axi0_rstn          ),  // global reset
+  .axi0_waddr_i    (  axi0_waddr         ),  // system write address
+  .axi0_wdata_i    (  axi0_wdata         ),  // system write data
+  .axi0_wsel_i     (  axi0_wsel          ),  // system write byte select
+  .axi0_wvalid_i   (  axi0_wvalid        ),  // system write data valid
+  .axi0_wlen_i     (  axi0_wlen          ),  // system write burst length
+  .axi0_wfixed_i   (  axi0_wfixed        ),  // system write burst type (fixed / incremental)
+  .axi0_werr_o     (  axi0_werr          ),  // system write error
+  .axi0_wrdy_o     (  axi0_wrdy          ),  // system write ready
+  .axi0_rstn_o     (  axi0_rstn_ps       ),  // reset from PS
 
-    // DDR Dump parameter export
-    .ddr_a_base_i   (ddr_a_base                 ),  // DDR ChA buffer base address
-    .ddr_a_end_i    (ddr_a_end                  ),  // DDR ChA buffer end address + 1
-    .ddr_a_curr_o   (ddr_a_curr                 ),  // DDR ChA current write address
-    .ddr_b_base_i   (ddr_b_base                 ),  // DDR ChB buffer base address
-    .ddr_b_end_i    (ddr_b_end                  ),  // DDR ChB buffer end address + 1
-    .ddr_b_curr_o   (ddr_b_curr                 ),  // DDR ChB current write address
-    .ddr_control_i  (ddr_control                )   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+   // AXI1 master
+  .axi1_clk_i      (  axi1_clk           ),  // global clock
+  .axi1_rstn_i     (  axi1_rstn          ),  // global reset
+  .axi1_waddr_i    (  axi1_waddr         ),  // system write address
+  .axi1_wdata_i    (  axi1_wdata         ),  // system write data
+  .axi1_wsel_i     (  axi1_wsel          ),  // system write byte select
+  .axi1_wvalid_i   (  axi1_wvalid        ),  // system write data valid
+  .axi1_wlen_i     (  axi1_wlen          ),  // system write burst length
+  .axi1_wfixed_i   (  axi1_wfixed        ),  // system write burst type (fixed / incremental)
+  .axi1_werr_o     (  axi1_werr          ),  // system write error
+  .axi1_wrdy_o     (  axi1_wrdy          ),  // system write ready
+  .axi1_rstn_o     (  axi1_rstn_ps       )   // reset from PS
 );
 
 
@@ -461,7 +416,33 @@ red_pitaya_scope i_scope
   .trig_ext_i      (  exp_p_in[0]                ),  // external trigger
   .trig_asg_i      (  trig_asg_out               ),  // ASG trigger
 
-   // System bus region 1
+  // AXI0 master
+  .axi0_clk_o      (  axi0_clk                   ),  // global clock
+  .axi0_rstn_o     (  axi0_rstn                  ),  // global reset
+  .axi0_waddr_o    (  axi0_waddr                 ),  // system write address
+  .axi0_wdata_o    (  axi0_wdata                 ),  // system write data
+  .axi0_wsel_o     (  axi0_wsel                  ),  // system write byte select
+  .axi0_wvalid_o   (  axi0_wvalid                ),  // system write data valid
+  .axi0_wlen_o     (  axi0_wlen                  ),  // system write burst length
+  .axi0_wfixed_o   (  axi0_wfixed                ),  // system write burst type (fixed / incremental)
+  .axi0_werr_i     (  axi0_werr                  ),  // system write error
+  .axi0_wrdy_i     (  axi0_wrdy                  ),  // system write ready
+  .axi0_rstn_i     (  axi0_rstn_ps               ),  // reset from PS
+
+  // AXI1 master
+  .axi1_clk_o      (  axi1_clk                   ),  // global clock
+  .axi1_rstn_o     (  axi1_rstn                  ),  // global reset
+  .axi1_waddr_o    (  axi1_waddr                 ),  // system write address
+  .axi1_wdata_o    (  axi1_wdata                 ),  // system write data
+  .axi1_wsel_o     (  axi1_wsel                  ),  // system write byte select
+  .axi1_wvalid_o   (  axi1_wvalid                ),  // system write data valid
+  .axi1_wlen_o     (  axi1_wlen                  ),  // system write burst length
+  .axi1_wfixed_o   (  axi1_wfixed                ),  // system write burst type (fixed / incremental)
+  .axi1_werr_i     (  axi1_werr                  ),  // system write error
+  .axi1_wrdy_i     (  axi1_wrdy                  ),  // system write ready
+  .axi1_rstn_i     (  axi1_rstn_ps               ),  // reset from PS
+
+   // System bus
   .sys_clk_i       (  sys_clk                    ),  // clock
   .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
   .sys_addr_i      (  sys_addr                   ),  // address
