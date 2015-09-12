@@ -13,7 +13,7 @@
 .PHONY: all clean image
 
 #### Parameters
-# vivado or ahead
+# vivado
 FPGA_TOOL=vivado
 
 SDK_DIR=$(FPGA_TOOL)/red_pitaya.sdk/SDK/SDK_Export
@@ -26,9 +26,6 @@ all: fpga sw_package image
 
 #### CLEAN
 clean:
-ifeq ($(FPGA_TOOL),ahead)
-	planAhead -mode tcl -source $$PWD/run_planahead.tcl -tclargs clean
-endif
 ifeq ($(FPGA_TOOL),vivado)
 	vivado -mode tcl -source $$PWD/run_vivado.tcl -tclargs clean
 endif
@@ -68,9 +65,6 @@ fsbl_bsp:
 
 #### Run FPGA tool
 fpga:
-ifeq ($(FPGA_TOOL),ahead)
-	planAhead -mode tcl -source $$PWD/run_planahead.tcl -tclargs build
-endif
 ifeq ($(FPGA_TOOL),vivado)
 	vivado -mode tcl -source $$PWD/run_vivado.tcl -tclargs build
 endif

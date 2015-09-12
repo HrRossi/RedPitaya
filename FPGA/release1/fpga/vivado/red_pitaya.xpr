@@ -13,5 +13,14 @@
 		<Option Name="Board" Val=""/>
 		<Option Name="ActiveSimSet" Val="sim_1"/>
 	</Config>
+	<MsgRule>
+		<MsgAttr Name="RuleType" Val="0"/>
+		<MsgAttr Name="Limit" Val="-1"/>
+		<MsgAttr Name="NewSeverity" Val="ANY"/>
+		<MsgAttr Name="Id" Val="Board 49-4"/>
+		<MsgAttr Name="Severity" Val="ANY"/>
+		<MsgAttr Name="ShowRule" Val="1"/>
+		<MsgAttr Name="RuleSource" Val="2"/>
+	</MsgRule>
 </Project>
 

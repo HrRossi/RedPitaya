@@ -17,7 +17,7 @@
  * Added infrastructure for ADC data transfer to DDR3 RAM through AXI HP bus
  */
 
- 
+
 /**
  * GENERAL DESCRIPTION:
  *
@@ -140,11 +140,12 @@ module red_pitaya_top
 
 );
 
-localparam SYSCONF_ID      = 32'hfff00001; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
+localparam SYSCONF_ID      = 32'hfff00002; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
 localparam SYSCONF_REGIONS = 8; // number of regions supported by the sysbus
 localparam FIRST_FREE      = 6; // index of first region not mapped to a functional block
 localparam SYSR = SYSCONF_REGIONS;
 genvar GV,CNT;
+
 
 
 
@@ -167,33 +168,137 @@ wire  [ 32-1: 0] ps_sys_rdata       ;
 wire             ps_sys_err         ;
 wire             ps_sys_ack         ;
 
-// AXI0 master
-wire             axi0_clk           ;
-wire             axi0_rstn          ;
-wire  [ 32-1: 0] axi0_waddr         ;
-wire  [ 64-1: 0] axi0_wdata         ;
-wire  [  8-1: 0] axi0_wsel          ;
-wire             axi0_wvalid        ;
-wire  [  4-1: 0] axi0_wlen          ;
-wire             axi0_wfixed        ;
-wire             axi0_werr          ;
-wire             axi0_wrdy          ;
-wire             axi0_rstn_ps       ;
+// Housekeeping GPIO
+wire            gpio_irq0;      // GPIO pin change interrupt request 0
 
-// AXI1 master
-wire             axi1_clk           ;
-wire             axi1_rstn          ;
-wire  [ 32-1: 0] axi1_waddr         ;
-wire  [ 64-1: 0] axi1_wdata         ;
-wire  [  8-1: 0] axi1_wsel          ;
-wire             axi1_wvalid        ;
-wire  [  4-1: 0] axi1_wlen          ;
-wire             axi1_wfixed        ;
-wire             axi1_werr          ;
-wire             axi1_wrdy          ;
-wire             axi1_rstn_ps       ;
+// ADC buffer
+wire [   2-1:0] adcbuf_select;  // channel buffer select
+wire [   4-1:0] adcbuf_ready;   // buffer ready [0]: ChA 0-1k, [1]: ChA 1k-2k, [2]: ChB 0-1k, [3]: ChB 1k-2k
+wire [   9-1:0] adcbuf_raddr;   // buffer read address
+wire [  64-1:0] adcbuf_rdata;   // buffer read data
 
-  
+// DDR Dump parameters and signals
+wire [  32-1:0] ddrd_a_base;    // DDR Dump ChA buffer base address
+wire [  32-1:0] ddrd_a_end;     // DDR Dump ChA buffer end address + 1
+wire [  32-1:0] ddrd_a_curr;    // DDR Dump ChA current write address
+wire [  32-1:0] ddrd_b_base;    // DDR Dump ChB buffer base address
+wire [  32-1:0] ddrd_b_end;     // DDR Dump ChB buffer end address + 1
+wire [  32-1:0] ddrd_b_curr;    // DDR Dump ChB current write address
+wire [   2-1:0] ddrd_status;    // DDR Dump [0,1]: INT pending A/B
+wire            ddrd_stat_rd;   // DDR Dump INT pending was read
+wire [   6-1:0] ddrd_control;   // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
+wire            ddrd_irq0;      // DDR Dump interrupt request 0
+
+// PL-PS Interrupt lines
+wire [    15:0] irq_f2p;        // ARM GIC ID 91-84,68-61
+
+
+//---------------------------------------------------------------------------------
+//
+//  system bus decoder & multiplexer
+//  it breaks memory addresses into SYSR regions
+
+wire                sys_clk    = ps_sys_clk      ;
+wire                sys_rstn   = ps_sys_rstn     ;
+wire  [    32-1: 0] sys_addr   = ps_sys_addr     ;
+wire  [    32-1: 0] sys_wdata  = ps_sys_wdata    ;
+wire  [     4-1: 0] sys_sel    = ps_sys_sel      ;
+wire  [     SYSR-1: 0] sys_wen    ;
+wire  [     SYSR-1: 0] sys_ren    ;
+wire  [(SYSR*32)-1: 0] sys_rdata  ;
+wire  [ (SYSR*1)-1: 0] sys_err    ;
+wire  [ (SYSR*1)-1: 0] sys_ack    ;
+reg   [     SYSR-1: 0] sys_cs     ;
+
+reg  [  32-1:0] sysconf_rdata;
+reg             sysconf_err;
+reg             sysconf_ack;
+reg             sysconf_cs;
+
+//---------------------------------------------------------------------------------
+// control signals sys_cs[], sys_wen[], sys_ren[], sysconf_cs
+//---------------------------------------------------------------------------------
+always @(sys_addr) begin
+    sys_cs <= {SYSR{1'b0}};
+    if (sys_addr[29:20] < SYSR) begin
+        sys_cs[sys_addr[29:20]] <= 1'b1;
+    end
+    sysconf_cs <= 1'b0;
+    if (sys_addr[29:20] == 10'h3ff) begin
+        sysconf_cs <= 1'b1;
+    end
+end
+
+assign sys_wen = sys_cs & {SYSR{ps_sys_wen}}  ;
+assign sys_ren = sys_cs & {SYSR{ps_sys_ren}}  ;
+
+//---------------------------------------------------------------------------------
+// multiplex outputs of sysregion blocks onto PS sysbus by cs + sysconf_cs
+//---------------------------------------------------------------------------------
+assign ps_sys_err = |(sys_cs & sys_err) | sysconf_cs & sysconf_err;
+assign ps_sys_ack = |(sys_cs & sys_ack) | sysconf_cs & sysconf_ack;
+
+wire [SYSR*32-1:0] sys_rdata_s;
+generate for (GV=0; GV<32; GV=GV+1) begin
+    for (CNT=0; CNT<SYSR; CNT=CNT+1) begin
+        assign sys_rdata_s[GV*SYSR+CNT] = sys_rdata[CNT*32+GV]; // reshuffle to align with sys_cs per bitline
+    end
+    assign ps_sys_rdata[GV] = |(sys_cs & sys_rdata_s[GV*SYSR+:SYSR]) | sysconf_cs & sysconf_rdata[GV];
+end endgenerate
+
+//---------------------------------------------------------------------------------
+// generate sane signals for unused regions
+//---------------------------------------------------------------------------------
+generate for (GV=FIRST_FREE; GV<SYSR; GV=GV+1) begin
+assign sys_rdata[GV*32+:32] = 32'h0;
+assign sys_err[GV] = 1'b0;
+assign sys_ack[GV] = 1'b1;
+end endgenerate
+
+//---------------------------------------------------------------------------------
+// PL-PS interrupt assignments
+//---------------------------------------------------------------------------------
+// 1. assign interrupts from your child modules here 
+// 2. create an interrupt configuration value for your sysbus region number below
+
+assign irq_f2p[ 0] = 0;             // IRQ0, GIC ID 61
+assign irq_f2p[ 1] = 0;             // IRQ1, GIC ID 62
+assign irq_f2p[ 2] = 0;             // IRQ2, GIC ID 63
+assign irq_f2p[ 3] = 0;             // IRQ3, GIC ID 64
+assign irq_f2p[ 4] = ddrd_irq0;     // DDR Dump interrupt 0 on behalf of scope on IRQ4, GIC ID 65
+assign irq_f2p[ 5] = 0;             // IRQ5, GIC ID 66
+assign irq_f2p[ 6] = 0;             // IRQ6, GIC ID 67
+assign irq_f2p[ 7] = 0;             // IRQ7, GIC ID 68
+assign irq_f2p[ 8] = 0;             // IRQ8, GIC ID 84
+assign irq_f2p[ 9] = 0;             // IRQ9, GIC ID 85
+assign irq_f2p[10] = gpio_irq0;     // GPIO change interrupt 0 on behalf of hk on IRQ10, GIC ID 86
+assign irq_f2p[11] = 0;             // IRQ11, GIC ID 87
+assign irq_f2p[12] = 0;             // IRQ12, GIC ID 88
+assign irq_f2p[13] = 0;             // IRQ13, GIC ID 89
+assign irq_f2p[14] = 0;             // IRQ14, GIC ID 90
+assign irq_f2p[15] = 0;             // IRQ15, GIC ID 91
+
+// static configuration values of the sysbus that will be queried by the rpad driver
+always @(*) begin
+    sysconf_ack <= 1'b1;
+    sysconf_err <= 1'b0;
+
+    case (sys_addr[19:0])
+    20'hf0000:  sysconf_rdata <= SYSCONF_ID;
+    20'hf0004:  sysconf_rdata <= SYSCONF_REGIONS;
+
+    // sysbus region interrupt config: up to 4 interrupt lines per region, 0xf0100: region 0, 0xf0104: region 1, ...
+    //                               31              15             0 | w,x,y,z: enable interrupt line 0,1,2,3
+    //                               000000000000wxyzaaaabbbbccccdddd | a,b,c,d: interrupt number (0-15) for line 0,1,2,3
+    20'hf0100:  sysconf_rdata <= 32'b00000000000010001010000000000000; // hk: IRQ10 on line 0
+    20'hf0104:  sysconf_rdata <= 32'b00000000000010000100000000000000; // scope: IRQ4 on line 0
+    //20'hf0108:  sysconf_rdata <= ; ...
+
+    default:    sysconf_rdata <= 32'h0;
+    endcase
+end
+
+
 red_pitaya_ps i_ps
 (
   .FIXED_IO_mio       (  FIXED_IO_mio                ),
@@ -247,31 +352,26 @@ red_pitaya_ps i_ps
   .spi_mosi_i      (  1'b0               ),  // master out slave in
   .spi_miso_o      (                     ),  // master in slave out
 
-   // AXI0 master
-  .axi0_clk_i      (  axi0_clk           ),  // global clock
-  .axi0_rstn_i     (  axi0_rstn          ),  // global reset
-  .axi0_waddr_i    (  axi0_waddr         ),  // system write address
-  .axi0_wdata_i    (  axi0_wdata         ),  // system write data
-  .axi0_wsel_i     (  axi0_wsel          ),  // system write byte select
-  .axi0_wvalid_i   (  axi0_wvalid        ),  // system write data valid
-  .axi0_wlen_i     (  axi0_wlen          ),  // system write burst length
-  .axi0_wfixed_i   (  axi0_wfixed        ),  // system write burst type (fixed / incremental)
-  .axi0_werr_o     (  axi0_werr          ),  // system write error
-  .axi0_wrdy_o     (  axi0_wrdy          ),  // system write ready
-  .axi0_rstn_o     (  axi0_rstn_ps       ),  // reset from PS
+    // ADC data buffer
+    .adcbuf_select_o    (adcbuf_select          ),  // buffer select ChA [0] / ChB [1]
+    .adcbuf_ready_i     (adcbuf_ready           ),  // buffer ready [0]: ChA 0k-8k, [1]: ChA 8k-16k, [2]: ChB 0k-8k, [3]: ChB 8k-16k
+    .adcbuf_raddr_o     (adcbuf_raddr           ),  //
+    .adcbuf_rdata_i     (adcbuf_rdata           ),  //
 
-   // AXI1 master
-  .axi1_clk_i      (  axi1_clk           ),  // global clock
-  .axi1_rstn_i     (  axi1_rstn          ),  // global reset
-  .axi1_waddr_i    (  axi1_waddr         ),  // system write address
-  .axi1_wdata_i    (  axi1_wdata         ),  // system write data
-  .axi1_wsel_i     (  axi1_wsel          ),  // system write byte select
-  .axi1_wvalid_i   (  axi1_wvalid        ),  // system write data valid
-  .axi1_wlen_i     (  axi1_wlen          ),  // system write burst length
-  .axi1_wfixed_i   (  axi1_wfixed        ),  // system write burst type (fixed / incremental)
-  .axi1_werr_o     (  axi1_werr          ),  // system write error
-  .axi1_wrdy_o     (  axi1_wrdy          ),  // system write ready
-  .axi1_rstn_o     (  axi1_rstn_ps       )   // reset from PS
+    // DDR Dump parameter
+    .ddrd_a_base_i  (ddrd_a_base                ),  // DDR Dump ChA buffer base address
+    .ddrd_a_end_i   (ddrd_a_end                 ),  // DDR Dump ChA buffer end address + 1
+    .ddrd_a_curr_o  (ddrd_a_curr                ),  // DDR Dump ChA current write address
+    .ddrd_b_base_i  (ddrd_b_base                ),  // DDR Dump ChB buffer base address
+    .ddrd_b_end_i   (ddrd_b_end                 ),  // DDR Dump ChB buffer end address + 1
+    .ddrd_b_curr_o  (ddrd_b_curr                ),  // DDR Dump ChB current write address
+    .ddrd_status_o  (ddrd_status                ),  // DDR Dump [0,1]: INT pending A/B
+    .ddrd_stat_rd_i (ddrd_stat_rd               ),  // DDR Dump INT pending was read
+    .ddrd_control_i (ddrd_control               ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
+    .ddrd_irq0_o    (ddrd_irq0                  ),  // DDR Dump interrupt request 0
+
+    // PL-PS Interrupt lines
+    .irq_f2p        (irq_f2p                    )   // ARM GIC ID 91-84,68-61
 );
 
 
@@ -372,6 +472,7 @@ red_pitaya_hk i_hk
   .exp_n_dat_i     (  exp_n_in                   ),
   .exp_n_dat_o     (  exp_n_out                  ),
   .exp_n_dir_o     (  exp_n_dir                  ),
+    .gpio_irq0_o    (gpio_irq0                  ),  // GPIO pin change interrupt request 0
 
    // System bus region 0
   .sys_clk_i       (  sys_clk                    ),  // clock
@@ -385,7 +486,6 @@ red_pitaya_hk i_hk
   .sys_err_o       (  sys_err[0]                 ),  // error indicator
   .sys_ack_o       (  sys_ack[0]                 )   // acknowledge signal
 );
-
 
 
 generate
@@ -416,33 +516,7 @@ red_pitaya_scope i_scope
   .trig_ext_i      (  exp_p_in[0]                ),  // external trigger
   .trig_asg_i      (  trig_asg_out               ),  // ASG trigger
 
-  // AXI0 master
-  .axi0_clk_o      (  axi0_clk                   ),  // global clock
-  .axi0_rstn_o     (  axi0_rstn                  ),  // global reset
-  .axi0_waddr_o    (  axi0_waddr                 ),  // system write address
-  .axi0_wdata_o    (  axi0_wdata                 ),  // system write data
-  .axi0_wsel_o     (  axi0_wsel                  ),  // system write byte select
-  .axi0_wvalid_o   (  axi0_wvalid                ),  // system write data valid
-  .axi0_wlen_o     (  axi0_wlen                  ),  // system write burst length
-  .axi0_wfixed_o   (  axi0_wfixed                ),  // system write burst type (fixed / incremental)
-  .axi0_werr_i     (  axi0_werr                  ),  // system write error
-  .axi0_wrdy_i     (  axi0_wrdy                  ),  // system write ready
-  .axi0_rstn_i     (  axi0_rstn_ps               ),  // reset from PS
-
-  // AXI1 master
-  .axi1_clk_o      (  axi1_clk                   ),  // global clock
-  .axi1_rstn_o     (  axi1_rstn                  ),  // global reset
-  .axi1_waddr_o    (  axi1_waddr                 ),  // system write address
-  .axi1_wdata_o    (  axi1_wdata                 ),  // system write data
-  .axi1_wsel_o     (  axi1_wsel                  ),  // system write byte select
-  .axi1_wvalid_o   (  axi1_wvalid                ),  // system write data valid
-  .axi1_wlen_o     (  axi1_wlen                  ),  // system write burst length
-  .axi1_wfixed_o   (  axi1_wfixed                ),  // system write burst type (fixed / incremental)
-  .axi1_werr_i     (  axi1_werr                  ),  // system write error
-  .axi1_wrdy_i     (  axi1_wrdy                  ),  // system write ready
-  .axi1_rstn_i     (  axi1_rstn_ps               ),  // reset from PS
-
-   // System bus
+   // System bus region 1
   .sys_clk_i       (  sys_clk                    ),  // clock
   .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
   .sys_addr_i      (  sys_addr                   ),  // address
@@ -454,14 +528,16 @@ red_pitaya_scope i_scope
   .sys_err_o       (  sys_err[1]                 ),  // error indicator
   .sys_ack_o       (  sys_ack[1]                 ),  // acknowledge signal
 
-    // DDR Dump parameter export
-    .ddr_a_base_o       (ddr_a_base         ),  // DDR ChA buffer base address
-    .ddr_a_end_o        (ddr_a_end          ),  // DDR ChA buffer end address + 1
-    .ddr_a_curr_i       (ddr_a_curr         ),  // DDR ChA current write address
-    .ddr_b_base_o       (ddr_b_base         ),  // DDR ChB buffer base address
-    .ddr_b_end_o        (ddr_b_end          ),  // DDR ChB buffer end address + 1
-    .ddr_b_curr_i       (ddr_b_curr         ),  // DDR ChB current write address
-    .ddr_control_o      (ddr_control        ),  // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B
+    // DDR Dump parameter
+    .ddr_a_base_o       (ddrd_a_base        ),  // DDR Dump ChA buffer base address
+    .ddr_a_end_o        (ddrd_a_end         ),  // DDR Dump ChA buffer end address + 1
+    .ddr_a_curr_i       (ddrd_a_curr        ),  // DDR Dump ChA current write address
+    .ddr_b_base_o       (ddrd_b_base        ),  // DDR Dump ChB buffer base address
+    .ddr_b_end_o        (ddrd_b_end         ),  // DDR Dump ChB buffer end address + 1
+    .ddr_b_curr_i       (ddrd_b_curr        ),  // DDR Dump ChB current write address
+    .ddr_status_i       (ddrd_status        ),  // DDR Dump [0,1]: INT pending A/B
+    .ddr_stat_rd_o      (ddrd_stat_rd       ),  // DDR Dump INT pending was read
+    .ddr_control_o      (ddrd_control       ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
 
     // ADC data buffer
     .adcbuf_clk_i       (fclk[0]            ),  // clock
@@ -547,7 +623,7 @@ red_pitaya_pid i_pid
 
 //---------------------------------------------------------------------------------
 //
-//  Summation of ASG and PID signal
+//  Sumation of ASG and PID signal
 //  perform saturation before sending to DAC 
 
 wire  [ 15-1: 0] dac_a_sum       ;
@@ -658,39 +734,6 @@ red_pitaya_daisy i_daisy
   .sys_err_o       (  sys_err[5]                 ),  // error indicator
   .sys_ack_o       (  sys_ack[5]                 )   // acknowledge signal
 );
-
-
-
-
-
-////---------------------------------------------------------------------------------
-////
-////  Power consumption test
-
-//red_pitaya_test i_test
-//(
-//   // power test
-//  .clk_i           (  adc_clk                    ),  // clock
-//  .rstn_i          (  adc_rstn                   ),  // reset - active low
-
-//  .rand_o          (                             ),
-
-//   // System bus region 7
-//  .sys_clk_i       (  sys_clk                    ),  // clock
-//  .sys_rstn_i      (  sys_rstn                   ),  // reset - active low
-//  .sys_addr_i      (  sys_addr                   ),  // address
-//  .sys_wdata_i     (  sys_wdata                  ),  // write data
-//  .sys_sel_i       (  sys_sel                    ),  // write byte select
-//  .sys_wen_i       (  sys_wen[7]                 ),  // write enable
-//  .sys_ren_i       (  sys_ren[7]                 ),  // read enable
-//  .sys_rdata_o     (  sys_rdata[ 7*32+31: 7*32]  ),  // read data
-//  .sys_err_o       (  sys_err[7]                 ),  // error indicator
-//  .sys_ack_o       (  sys_ack[7]                 )   // acknowledge signal
-//);
-
-////assign sys_rdata[ 7*32+31: 7*32] = 32'h0 ; 
-////assign sys_err[7] = 1'b0 ;
-////assign sys_ack[7] = 1'b1 ;
 
 
 

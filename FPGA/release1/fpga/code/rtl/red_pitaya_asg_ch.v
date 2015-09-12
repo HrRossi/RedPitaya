@@ -255,7 +255,7 @@ assign trig_done_o = !dac_rep && trig_in;
 //
 //  External trigger
 
-reg  [  3-1: 0] ext_trig_in    ;
+(* ASYNC_REG="true" *)  reg  [  3-1: 0] ext_trig_in    ;
 reg  [  2-1: 0] ext_trig_dp    ;
 reg  [  2-1: 0] ext_trig_dn    ;
 reg  [ 20-1: 0] ext_trig_debp  ;

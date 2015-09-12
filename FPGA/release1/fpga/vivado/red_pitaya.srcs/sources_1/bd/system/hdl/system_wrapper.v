@@ -1,7 +1,23 @@
 `timescale 1 ps / 1 ps
 
 module system_wrapper
-   (DDR_addr,
+   (ARM_GIC_ID_61,
+    ARM_GIC_ID_62,
+    ARM_GIC_ID_63,
+    ARM_GIC_ID_64,
+    ARM_GIC_ID_65,
+    ARM_GIC_ID_66,
+    ARM_GIC_ID_67,
+    ARM_GIC_ID_68,
+    ARM_GIC_ID_84,
+    ARM_GIC_ID_85,
+    ARM_GIC_ID_86,
+    ARM_GIC_ID_87,
+    ARM_GIC_ID_88,
+    ARM_GIC_ID_89,
+    ARM_GIC_ID_90,
+    ARM_GIC_ID_91,
+    DDR_addr,
     DDR_ba,
     DDR_cas_n,
     DDR_ck_n,
@@ -82,7 +98,6 @@ module system_wrapper
     SPI0_SS_I,
     SPI0_SS_O,
     SPI0_SS_T,
-    S_AXI_HP0_aclk,
     S_AXI_HP0_araddr,
     S_AXI_HP0_arburst,
     S_AXI_HP0_arcache,
@@ -120,46 +135,23 @@ module system_wrapper
     S_AXI_HP0_wlast,
     S_AXI_HP0_wready,
     S_AXI_HP0_wstrb,
-    S_AXI_HP0_wvalid,
-    S_AXI_HP1_aclk,
-    S_AXI_HP1_araddr,
-    S_AXI_HP1_arburst,
-    S_AXI_HP1_arcache,
-    S_AXI_HP1_arid,
-    S_AXI_HP1_arlen,
-    S_AXI_HP1_arlock,
-    S_AXI_HP1_arprot,
-    S_AXI_HP1_arqos,
-    S_AXI_HP1_arready,
-    S_AXI_HP1_arsize,
-    S_AXI_HP1_arvalid,
-    S_AXI_HP1_awaddr,
-    S_AXI_HP1_awburst,
-    S_AXI_HP1_awcache,
-    S_AXI_HP1_awid,
-    S_AXI_HP1_awlen,
-    S_AXI_HP1_awlock,
-    S_AXI_HP1_awprot,
-    S_AXI_HP1_awqos,
-    S_AXI_HP1_awready,
-    S_AXI_HP1_awsize,
-    S_AXI_HP1_awvalid,
-    S_AXI_HP1_bid,
-    S_AXI_HP1_bready,
-    S_AXI_HP1_bresp,
-    S_AXI_HP1_bvalid,
-    S_AXI_HP1_rdata,
-    S_AXI_HP1_rid,
-    S_AXI_HP1_rlast,
-    S_AXI_HP1_rready,
-    S_AXI_HP1_rresp,
-    S_AXI_HP1_rvalid,
-    S_AXI_HP1_wdata,
-    S_AXI_HP1_wid,
-    S_AXI_HP1_wlast,
-    S_AXI_HP1_wready,
-    S_AXI_HP1_wstrb,
-    S_AXI_HP1_wvalid);
+    S_AXI_HP0_wvalid);
+  input [0:0]ARM_GIC_ID_61;
+  input [0:0]ARM_GIC_ID_62;
+  input [0:0]ARM_GIC_ID_63;
+  input [0:0]ARM_GIC_ID_64;
+  input [0:0]ARM_GIC_ID_65;
+  input [0:0]ARM_GIC_ID_66;
+  input [0:0]ARM_GIC_ID_67;
+  input [0:0]ARM_GIC_ID_68;
+  input [0:0]ARM_GIC_ID_84;
+  input [0:0]ARM_GIC_ID_85;
+  input [0:0]ARM_GIC_ID_86;
+  input [0:0]ARM_GIC_ID_87;
+  input [0:0]ARM_GIC_ID_88;
+  input [0:0]ARM_GIC_ID_89;
+  input [0:0]ARM_GIC_ID_90;
+  input [0:0]ARM_GIC_ID_91;
   inout [14:0]DDR_addr;
   inout [2:0]DDR_ba;
   inout DDR_cas_n;
@@ -241,7 +233,6 @@ module system_wrapper
   input SPI0_SS_I;
   output SPI0_SS_O;
   output SPI0_SS_T;
-  input S_AXI_HP0_aclk;
   input [31:0]S_AXI_HP0_araddr;
   input [1:0]S_AXI_HP0_arburst;
   input [3:0]S_AXI_HP0_arcache;
@@ -280,46 +271,23 @@ module system_wrapper
   output S_AXI_HP0_wready;
   input [7:0]S_AXI_HP0_wstrb;
   input S_AXI_HP0_wvalid;
-  input S_AXI_HP1_aclk;
-  input [31:0]S_AXI_HP1_araddr;
-  input [1:0]S_AXI_HP1_arburst;
-  input [3:0]S_AXI_HP1_arcache;
-  input [5:0]S_AXI_HP1_arid;
-  input [3:0]S_AXI_HP1_arlen;
-  input [1:0]S_AXI_HP1_arlock;
-  input [2:0]S_AXI_HP1_arprot;
-  input [3:0]S_AXI_HP1_arqos;
-  output S_AXI_HP1_arready;
-  input [2:0]S_AXI_HP1_arsize;
-  input S_AXI_HP1_arvalid;
-  input [31:0]S_AXI_HP1_awaddr;
-  input [1:0]S_AXI_HP1_awburst;
-  input [3:0]S_AXI_HP1_awcache;
-  input [5:0]S_AXI_HP1_awid;
-  input [3:0]S_AXI_HP1_awlen;
-  input [1:0]S_AXI_HP1_awlock;
-  input [2:0]S_AXI_HP1_awprot;
-  input [3:0]S_AXI_HP1_awqos;
-  output S_AXI_HP1_awready;
-  input [2:0]S_AXI_HP1_awsize;
-  input S_AXI_HP1_awvalid;
-  output [5:0]S_AXI_HP1_bid;
-  input S_AXI_HP1_bready;
-  output [1:0]S_AXI_HP1_bresp;
-  output S_AXI_HP1_bvalid;
-  output [63:0]S_AXI_HP1_rdata;
-  output [5:0]S_AXI_HP1_rid;
-  output S_AXI_HP1_rlast;
-  input S_AXI_HP1_rready;
-  output [1:0]S_AXI_HP1_rresp;
-  output S_AXI_HP1_rvalid;
-  input [63:0]S_AXI_HP1_wdata;
-  input [5:0]S_AXI_HP1_wid;
-  input S_AXI_HP1_wlast;
-  output S_AXI_HP1_wready;
-  input [7:0]S_AXI_HP1_wstrb;
-  input S_AXI_HP1_wvalid;
 
+  wire [0:0]ARM_GIC_ID_61;
+  wire [0:0]ARM_GIC_ID_62;
+  wire [0:0]ARM_GIC_ID_63;
+  wire [0:0]ARM_GIC_ID_64;
+  wire [0:0]ARM_GIC_ID_65;
+  wire [0:0]ARM_GIC_ID_66;
+  wire [0:0]ARM_GIC_ID_67;
+  wire [0:0]ARM_GIC_ID_68;
+  wire [0:0]ARM_GIC_ID_84;
+  wire [0:0]ARM_GIC_ID_85;
+  wire [0:0]ARM_GIC_ID_86;
+  wire [0:0]ARM_GIC_ID_87;
+  wire [0:0]ARM_GIC_ID_88;
+  wire [0:0]ARM_GIC_ID_89;
+  wire [0:0]ARM_GIC_ID_90;
+  wire [0:0]ARM_GIC_ID_91;
   wire [14:0]DDR_addr;
   wire [2:0]DDR_ba;
   wire DDR_cas_n;
@@ -401,7 +369,6 @@ module system_wrapper
   wire SPI0_SS_I;
   wire SPI0_SS_O;
   wire SPI0_SS_T;
-  wire S_AXI_HP0_aclk;
   wire [31:0]S_AXI_HP0_araddr;
   wire [1:0]S_AXI_HP0_arburst;
   wire [3:0]S_AXI_HP0_arcache;
@@ -440,48 +407,25 @@ module system_wrapper
   wire S_AXI_HP0_wready;
   wire [7:0]S_AXI_HP0_wstrb;
   wire S_AXI_HP0_wvalid;
-  wire S_AXI_HP1_aclk;
-  wire [31:0]S_AXI_HP1_araddr;
-  wire [1:0]S_AXI_HP1_arburst;
-  wire [3:0]S_AXI_HP1_arcache;
-  wire [5:0]S_AXI_HP1_arid;
-  wire [3:0]S_AXI_HP1_arlen;
-  wire [1:0]S_AXI_HP1_arlock;
-  wire [2:0]S_AXI_HP1_arprot;
-  wire [3:0]S_AXI_HP1_arqos;
-  wire S_AXI_HP1_arready;
-  wire [2:0]S_AXI_HP1_arsize;
-  wire S_AXI_HP1_arvalid;
-  wire [31:0]S_AXI_HP1_awaddr;
-  wire [1:0]S_AXI_HP1_awburst;
-  wire [3:0]S_AXI_HP1_awcache;
-  wire [5:0]S_AXI_HP1_awid;
-  wire [3:0]S_AXI_HP1_awlen;
-  wire [1:0]S_AXI_HP1_awlock;
-  wire [2:0]S_AXI_HP1_awprot;
-  wire [3:0]S_AXI_HP1_awqos;
-  wire S_AXI_HP1_awready;
-  wire [2:0]S_AXI_HP1_awsize;
-  wire S_AXI_HP1_awvalid;
-  wire [5:0]S_AXI_HP1_bid;
-  wire S_AXI_HP1_bready;
-  wire [1:0]S_AXI_HP1_bresp;
-  wire S_AXI_HP1_bvalid;
-  wire [63:0]S_AXI_HP1_rdata;
-  wire [5:0]S_AXI_HP1_rid;
-  wire S_AXI_HP1_rlast;
-  wire S_AXI_HP1_rready;
-  wire [1:0]S_AXI_HP1_rresp;
-  wire S_AXI_HP1_rvalid;
-  wire [63:0]S_AXI_HP1_wdata;
-  wire [5:0]S_AXI_HP1_wid;
-  wire S_AXI_HP1_wlast;
-  wire S_AXI_HP1_wready;
-  wire [7:0]S_AXI_HP1_wstrb;
-  wire S_AXI_HP1_wvalid;
 
 system system_i
-       (.DDR_addr(DDR_addr),
+       (.ARM_GIC_ID_61(ARM_GIC_ID_61),
+        .ARM_GIC_ID_62(ARM_GIC_ID_62),
+        .ARM_GIC_ID_63(ARM_GIC_ID_63),
+        .ARM_GIC_ID_64(ARM_GIC_ID_64),
+        .ARM_GIC_ID_65(ARM_GIC_ID_65),
+        .ARM_GIC_ID_66(ARM_GIC_ID_66),
+        .ARM_GIC_ID_67(ARM_GIC_ID_67),
+        .ARM_GIC_ID_68(ARM_GIC_ID_68),
+        .ARM_GIC_ID_84(ARM_GIC_ID_84),
+        .ARM_GIC_ID_85(ARM_GIC_ID_85),
+        .ARM_GIC_ID_86(ARM_GIC_ID_86),
+        .ARM_GIC_ID_87(ARM_GIC_ID_87),
+        .ARM_GIC_ID_88(ARM_GIC_ID_88),
+        .ARM_GIC_ID_89(ARM_GIC_ID_89),
+        .ARM_GIC_ID_90(ARM_GIC_ID_90),
+        .ARM_GIC_ID_91(ARM_GIC_ID_91),
+        .DDR_addr(DDR_addr),
         .DDR_ba(DDR_ba),
         .DDR_cas_n(DDR_cas_n),
         .DDR_ck_n(DDR_ck_n),
@@ -562,7 +506,6 @@ system system_i
         .SPI0_SS_I(SPI0_SS_I),
         .SPI0_SS_O(SPI0_SS_O),
         .SPI0_SS_T(SPI0_SS_T),
-        .S_AXI_HP0_aclk(S_AXI_HP0_aclk),
         .S_AXI_HP0_araddr(S_AXI_HP0_araddr),
         .S_AXI_HP0_arburst(S_AXI_HP0_arburst),
         .S_AXI_HP0_arcache(S_AXI_HP0_arcache),
@@ -600,44 +543,5 @@ system system_i
         .S_AXI_HP0_wlast(S_AXI_HP0_wlast),
         .S_AXI_HP0_wready(S_AXI_HP0_wready),
         .S_AXI_HP0_wstrb(S_AXI_HP0_wstrb),
-        .S_AXI_HP0_wvalid(S_AXI_HP0_wvalid),
-        .S_AXI_HP1_aclk(S_AXI_HP1_aclk),
-        .S_AXI_HP1_araddr(S_AXI_HP1_araddr),
-        .S_AXI_HP1_arburst(S_AXI_HP1_arburst),
-        .S_AXI_HP1_arcache(S_AXI_HP1_arcache),
-        .S_AXI_HP1_arid(S_AXI_HP1_arid),
-        .S_AXI_HP1_arlen(S_AXI_HP1_arlen),
-        .S_AXI_HP1_arlock(S_AXI_HP1_arlock),
-        .S_AXI_HP1_arprot(S_AXI_HP1_arprot),
-        .S_AXI_HP1_arqos(S_AXI_HP1_arqos),
-        .S_AXI_HP1_arready(S_AXI_HP1_arready),
-        .S_AXI_HP1_arsize(S_AXI_HP1_arsize),
-        .S_AXI_HP1_arvalid(S_AXI_HP1_arvalid),
-        .S_AXI_HP1_awaddr(S_AXI_HP1_awaddr),
-        .S_AXI_HP1_awburst(S_AXI_HP1_awburst),
-        .S_AXI_HP1_awcache(S_AXI_HP1_awcache),
-        .S_AXI_HP1_awid(S_AXI_HP1_awid),
-        .S_AXI_HP1_awlen(S_AXI_HP1_awlen),
-        .S_AXI_HP1_awlock(S_AXI_HP1_awlock),
-        .S_AXI_HP1_awprot(S_AXI_HP1_awprot),
-        .S_AXI_HP1_awqos(S_AXI_HP1_awqos),
-        .S_AXI_HP1_awready(S_AXI_HP1_awready),
-        .S_AXI_HP1_awsize(S_AXI_HP1_awsize),
-        .S_AXI_HP1_awvalid(S_AXI_HP1_awvalid),
-        .S_AXI_HP1_bid(S_AXI_HP1_bid),
-        .S_AXI_HP1_bready(S_AXI_HP1_bready),
-        .S_AXI_HP1_bresp(S_AXI_HP1_bresp),
-        .S_AXI_HP1_bvalid(S_AXI_HP1_bvalid),
-        .S_AXI_HP1_rdata(S_AXI_HP1_rdata),
-        .S_AXI_HP1_rid(S_AXI_HP1_rid),
-        .S_AXI_HP1_rlast(S_AXI_HP1_rlast),
-        .S_AXI_HP1_rready(S_AXI_HP1_rready),
-        .S_AXI_HP1_rresp(S_AXI_HP1_rresp),
-        .S_AXI_HP1_rvalid(S_AXI_HP1_rvalid),
-        .S_AXI_HP1_wdata(S_AXI_HP1_wdata),
-        .S_AXI_HP1_wid(S_AXI_HP1_wid),
-        .S_AXI_HP1_wlast(S_AXI_HP1_wlast),
-        .S_AXI_HP1_wready(S_AXI_HP1_wready),
-        .S_AXI_HP1_wstrb(S_AXI_HP1_wstrb),
-        .S_AXI_HP1_wvalid(S_AXI_HP1_wvalid));
+        .S_AXI_HP0_wvalid(S_AXI_HP0_wvalid));
 endmodule

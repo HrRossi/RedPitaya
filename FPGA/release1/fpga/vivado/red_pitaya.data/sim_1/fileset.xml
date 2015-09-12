@@ -5,7 +5,6 @@
     <Config>
       <Option Name="DesignMode" Val="RTL"/>
       <Option Name="TopModule" Val="red_pitaya_scope_tb"/>
-      <Option Name="SimMode" Val="post-implementation"/>
       <Option Name="SrcSet" Val="sources_1"/>
     </Config>
   </FileSet>

@@ -46,6 +46,7 @@ module red_pitaya_hk
    input      [  8-1: 0] exp_n_dat_i     ,  //!<
    output reg [  8-1: 0] exp_n_dat_o     ,  //!<
    output reg [  8-1: 0] exp_n_dir_o     ,  //!<
+    output                  gpio_irq0_o,    // GPIO pin change interrupt request 0
 
    // System bus
    input                 sys_clk_i       ,  //!< bus clock
@@ -61,11 +62,12 @@ module red_pitaya_hk
 
 );
 
-/* ID values to be read by the device driver, mapped at 40000ff0 - 40000fff */
+// ID values to be read by the device driver, mapped at 40000ff0 - 40000fff
 localparam SYS_ID = 32'h00100001; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
-localparam SYS_1 = 32'h00000000;
-localparam SYS_2 = 32'h00000000;
-localparam SYS_3 = 32'h00000000;
+localparam SYS_1  = 32'h00000000;
+localparam SYS_2  = 32'h00000000;
+localparam SYS_3  = 32'h00000000;
+
 
 
 
@@ -74,69 +76,10 @@ localparam SYS_3 = 32'h00000000;
 //
 //  Simple LED logic
 
-//reg [32-1: 0] shift_led_cnt ;
-//reg [ 8-1: 0] shift_led_reg ;
-//reg           shift_led_dir ;
-//
-//always @(posedge clk_i) begin
-//   if (rstn_i == 1'b0) begin
-//      shift_led_cnt <= 32'h0 ;
-//      shift_led_reg <=  8'h1 ;
-//      shift_led_dir <=  1'b1 ; // 1-left, 0-right
-//   end
-//   else begin
-//      if (shift_led_cnt == 32'd40000000)
-//         shift_led_cnt <= 32'h1;
-//      else
-//         shift_led_cnt <= shift_led_cnt + 32'h1;
-//
-//      if (shift_led_cnt == 32'h1) begin
-//         if (shift_led_dir)
-//            shift_led_reg <= {shift_led_reg[6:0], 1'b0} ; //shift left
-//         else
-//            shift_led_reg <= {1'b0, shift_led_reg[7:1]} ; //shift right
-//
-//          // change direction
-//         if (shift_led_dir && (shift_led_reg==8'h40))
-//            shift_led_dir <= !shift_led_dir ;
-//         else if (!shift_led_dir && (shift_led_reg==8'h2))
-//            shift_led_dir <= !shift_led_dir ;
-//      end
-//   end
-//end
-    
-
-
-
-
-
-
-
-//---------------------------------------------------------------------------------
-//
-//  Testing logic
-
-//// LED blinking
-//reg  [  8-1: 0] led_reg ;      
-//reg  [ 32-1: 0] led_cnt ;      
-//
-//always @(posedge clk_i) begin
-//   if (rstn_i == 1'b0) begin
-//      led_reg[0] <=  1'b0 ;
-//      led_cnt    <= 32'h0 ;
-//   end
-//   else begin
-//      led_reg[0] <= led_cnt[26] ;
-//      led_cnt    <= led_cnt + 32'h1 ;
-//   end
-//end
-
-
-//assign led_o = led_reg ; //shift_led_reg;
-
 reg [8-1:0] led_reg;
 
 assign led_o = led_reg;
+
 
 
 
@@ -207,6 +150,8 @@ assign id_value[ 3: 0] =  4'h1 ; // board type   1-release1
 
 
 
+
+
 //---------------------------------------------------------------------------------
 //
 //  System bus connection
@@ -214,7 +159,6 @@ assign id_value[ 3: 0] =  4'h1 ; // board type   1-release1
 
 always @(posedge sys_clk_i) begin
    if (sys_rstn_i == 1'b0) begin
-//      led_reg[7:1] <= 7'h0 ;
       led_reg[7:0] <= 8'h0 ;
       exp_p_dat_o  <= 8'h0 ;
       exp_p_dir_o  <= 8'h0 ;
@@ -252,7 +196,7 @@ always @(*) begin
      20'h00020 : begin sys_ack_o <= 1'b1;          sys_rdata_o <= {{32- 8{1'b0}}, exp_p_dat_i }                        ; end
      20'h00024 : begin sys_ack_o <= 1'b1;          sys_rdata_o <= {{32- 8{1'b0}}, exp_n_dat_i }                        ; end
 
-     20'h00030 : begin sys_ack_o <= 1'b1;          sys_rdata_o <= {{32- 8{1'b0}}, led_reg[7:0]}                        ; end
+     20'h00030 : begin sys_ack_o <= 1'b1;          sys_rdata_o <= {{32- 8{1'b0}}, led_reg[7:0] }                       ; end
 
     20'h00ff0:  begin   sys_ack_o <= 1'b1; sys_rdata_o <= SYS_ID;   end
     20'h00ff4:  begin   sys_ack_o <= 1'b1; sys_rdata_o <= SYS_1;    end
@@ -263,9 +207,10 @@ always @(*) begin
    endcase
 end
 
+assign gpio_irq0_o = 1'b0;
+
 
 
 
 
 endmodule
-
