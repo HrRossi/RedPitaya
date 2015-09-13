@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Strategy Version="1" Minor="2">
-	<StratHandle Name="Congestion_SpreadLogic_medium" Flow="Vivado Implementation 2013">
-		<Desc>Spread logic throughout the device to avoid creating congested regions. (medium setting)</Desc>
+	<StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2013">
+		<Desc>Vivado Implementation Defaults</Desc>
 	</StratHandle>
 	<Step Id="init_design">
 	</Step>
@@ -10,15 +10,15 @@
 	<Step Id="power_opt_design">
 	</Step>
 	<Step Id="place_design">
-		<Option Id="Directive">7</Option>
+		<Option Id="Directive">2</Option>
 	</Step>
-	<Step Id="post_place_power_opt_design">
+	<Step Id="post_place_power_opt_design" EnableStepBool="1">
 	</Step>
 	<Step Id="phys_opt_design" EnableStepBool="1">
-		<Option Id="Directive">3</Option>
+		<Option Id="Directive">5</Option>
 	</Step>
 	<Step Id="route_design">
-		<Option Id="Directive">3</Option>
+		<Option Id="Directive">2</Option>
 	</Step>
 	<Step Id="write_bitstream">
 	</Step>

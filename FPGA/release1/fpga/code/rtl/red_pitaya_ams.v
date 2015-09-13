@@ -282,7 +282,7 @@ end
 
 
 // bridge between ADC and sys clock
-bus_clk_bridge i_bridge
+bus_clk_bridge i_bridge_ams
 (
    .sys_clk_i     (  sys_clk_i      ),
    .sys_rstn_i    (  sys_rstn_i     ),

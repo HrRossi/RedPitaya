@@ -50,6 +50,7 @@
 #define SCOPE_ddr_b_end		0x00000110UL
 #define SCOPE_ddr_a_curr	0x00000114UL /* read only */
 #define SCOPE_ddr_b_curr	0x00000118UL /* read only */
+#define SCOPE_ddr_status	0x0000011cUL /* read only */
 
 static unsigned int ddrd_minsize = 0x00010000UL;
 static unsigned int ddrd_maxsize = 0x00400000UL;
@@ -412,7 +413,8 @@ static irqreturn_t rpad_ddrdump_irq_handler(int cpl, void *dev_id)
 {
 	struct rpad_scope *scope = container_of(dev_id, struct rpad_scope, rp_dev);
 
-	/* TODO */(void)scope;
+	ioread32(rp_addr(scope, SCOPE_ddr_status));
+	/* TODO */
 
 	return IRQ_HANDLED;
 }

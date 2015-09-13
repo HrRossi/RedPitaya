@@ -440,6 +440,7 @@ reg     ddr_a_prev;
 reg     ddr_b_prev;
 wire    irq_cond_a = ddr_a_curr[12] ^ ddr_a_prev;
 wire    irq_cond_b = ddr_b_curr[12] ^ ddr_b_prev;
+(* ASYNC_REG="true" *)  reg  [2:0] ddr_r_sync;
 
 always @(posedge axi_clk_i) begin
     if (!axi_rstn_i) begin
@@ -447,10 +448,13 @@ always @(posedge axi_clk_i) begin
         ddr_irq0   <= 1'b0;
         ddr_a_prev <= 1'b0;
         ddr_b_prev <= 1'b0;
+        ddr_r_sync <= 3'b000;
     end else begin
+        ddr_r_sync <= {ddr_r_sync[1:0],ddr_stat_rd_i};
+
         if (irq_cond_a) begin
             ddr_status[0] <= 1'b1;
-        end else if (ddr_stat_rd_i) begin
+        end else if (ddr_r_sync[2]) begin
             ddr_status[0] <= 1'b0;
         end else begin
             ddr_status[0] <= ddr_status[0];
@@ -458,7 +462,7 @@ always @(posedge axi_clk_i) begin
 
         if (irq_cond_b) begin
             ddr_status[1] <= 1'b1;
-        end else if (ddr_stat_rd_i) begin
+        end else if (ddr_r_sync[2]) begin
             ddr_status[1] <= 1'b0;
         end else begin
             ddr_status[1] <= ddr_status[1];
@@ -467,7 +471,7 @@ always @(posedge axi_clk_i) begin
         if ((ddr_control_i[4] & !ddr_status[0] & irq_cond_a) |
             (ddr_control_i[5] & !ddr_status[1] & irq_cond_b)) begin
             ddr_irq0 <= 1'b1;
-        end else if (ddr_stat_rd_i) begin
+        end else if (ddr_r_sync[2]) begin
             ddr_irq0 <= 1'b0;
         end else begin
             ddr_irq0 <= ddr_irq0;

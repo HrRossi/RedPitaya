@@ -638,14 +638,13 @@ reg  [  32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
 reg  [  32-1:0] ddr_b_base;     // DDR ChB buffer base address
 reg  [  32-1:0] ddr_b_end;      // DDR ChB buffer end address + 1
 reg  [   6-1:0] ddr_control;    // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
-reg             ddr_stat_rd;    // DDR INT pending was read
 
 assign ddr_a_base_o  = ddr_a_base;
 assign ddr_a_end_o   = ddr_a_end;
 assign ddr_b_base_o  = ddr_b_base;
 assign ddr_b_end_o   = ddr_b_end;
 assign ddr_control_o = ddr_control;
-assign ddr_stat_rd_o = ddr_stat_rd;
+assign ddr_stat_rd_o = ren & (addr[19:0] == 20'h0011c);
 
 always @(posedge adc_clk_i) begin
    if (adc_rstn_i == 1'b0) begin
@@ -669,7 +668,6 @@ always @(posedge adc_clk_i) begin
         ddr_b_base  <= 32'h00000000;
         ddr_b_end   <= 32'h00000000;
         ddr_control <= 6'b000000;
-        ddr_stat_rd <= 1'b0;
    end
    else begin
       if (wen) begin
@@ -751,10 +749,7 @@ always @(*) begin
 
        default : begin ack <= 1'b1;          rdata <=  32'h0                              ; end
    endcase
-
-    ddr_stat_rd <= ren & (addr[19:0] == 20'h0011c);
 end
-
 
 
 
