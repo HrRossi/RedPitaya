@@ -32965,7 +32965,7 @@
     <spirit:parameter>
       <spirit:name>PCW_UIPARAM_DDR_BL</spirit:name>
       <spirit:displayName>PCW UIPARAM DDR BL</spirit:displayName>
-      <spirit:value spirit:format="string" spirit:resolve="user" spirit:id="PARAM_VALUE.PCW_UIPARAM_DDR_BL" spirit:choiceRef="choices_204" spirit:order="13300">4</spirit:value>
+      <spirit:value spirit:format="string" spirit:resolve="user" spirit:id="PARAM_VALUE.PCW_UIPARAM_DDR_BL" spirit:choiceRef="choices_204" spirit:order="13300">8</spirit:value>
       <spirit:vendorExtensions>
         <xilinx:parameterInfo>
           <xilinx:enablement>
