@@ -10,6 +10,7 @@ buildroot       Root filesystem (ramdisk).
 discovery       IP discovery connection agent.
 filesystem      Overlay for SD card filesystem, holding user configurable
                 files.
+driver          Additional kernel modules
 
 Upon boot, the ramdisk image and thus the root filesystem resides in RAM.
 Although it is writable, its content is lost at next reboot or power cycle.

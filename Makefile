@@ -33,6 +33,8 @@ MONITOR_DIR=Test/monitor
 GENERATE_DIR=Test/generate
 ACQUIRE_DIR=Test/acquire
 CALIB_DIR=Test/calib
+RPRA_DIR=Test/rp_remote_acquire
+RPAD_DIR=OS/driver/rpad
 DISCOVERY_DIR=OS/discovery
 ECOSYSTEM_DIR=Applications/ecosystem
 SDK=sdk
@@ -46,12 +48,15 @@ FPGA=$(BUILD)/fpga.bit
 FSBL=$(BUILD)/fsbl.elf
 TESTBOOT=testboot.bin
 MEMTEST=$(BUILD)/memtest.elf
+DRIVER=$(BUILD)/memtest.elf
 URAMDISK=$(BUILD)/uramdisk.image.gz
 NGINX=$(BUILD)/sbin/nginx
 MONITOR=$(BUILD)/bin/monitor
 GENERATE=$(BUILD)/bin/generate
 ACQUIRE=$(BUILD)/bin/acquire
 CALIB=$(BUILD)/bin/calib
+RPRA=$(BUILD)/bin/rp_remote_acquire
+RPAD=$(BUILD)/bin/rpad.ko
 DISCOVERY=$(BUILD)/sbin/discovery
 ECOSYSTEM=$(BUILD)/www/apps/info/info.json
 SCPI_SERVER=$(BUILD)/bin/scpi-server
@@ -68,7 +73,7 @@ export VERSION
 
 all: zip
 
-$(TARGET): $(BOOT) $(TESTBOOT) $(LINUX) $(DEVICETREE) $(URAMDISK) $(NGINX) $(MONITOR) $(GENERATE) $(ACQUIRE) $(SCPI_SERVER) $(CALIB) $(DISCOVERY) $(ECOSYSTEM)
+$(TARGET): $(BOOT) $(TESTBOOT) $(LINUX) $(DEVICETREE) $(URAMDISK) $(NGINX) $(MONITOR) $(GENERATE) $(ACQUIRE) $(RPRA) $(RPAD) $(SCPI_SERVER) $(CALIB) $(DISCOVERY) $(ECOSYSTEM)
 	mkdir $(TARGET)
 	cp -r $(BUILD)/* $(TARGET)
 	rm -f $(TARGET)/fsbl.elf $(TARGET)/fpga.bit $(TARGET)/u-boot.elf $(TARGET)/devicetree.dts* $(TARGET)/memtest.elf
@@ -134,6 +139,14 @@ $(CALIB):
 	$(MAKE) -C $(CALIB_DIR) CROSS_COMPILE=arm-xilinx-linux-gnueabi-
 	$(MAKE) -C $(CALIB_DIR) install INSTALL_DIR=$(abspath $(BUILD))
 
+$(RPRA):
+	$(MAKE) -C $(RPRA_DIR) CROSS_COMPILE=arm-xilinx-linux-gnueabi-
+	$(MAKE) -C $(RPRA_DIR) install INSTALL_DIR=$(abspath $(BUILD))
+
+$(RPAD): $(LINUX)
+	$(MAKE) -C $(RPAD_DIR) all
+	$(MAKE) -C $(RPAD_DIR) install INSTALL_DIR=$(abspath $(BUILD))
+
 $(DISCOVERY):
 	$(MAKE) -C $(DISCOVERY_DIR) CROSS_COMPILE=arm-xilinx-linux-gnueabi-
 	$(MAKE) -C $(DISCOVERY_DIR) install INSTALL_DIR=$(abspath $(BUILD))
@@ -156,6 +169,8 @@ clean:
 	make -C $(GENERATE_DIR) clean
 	make -C $(ACQUIRE_DIR) clean
 	make -C $(CALIB_DIR) clean
+	make -C $(RPRA_DIR) clean
+	make -C $(RPAD_DIR) clean
 	make -C $(DISCOVERY_DIR) clean
 	make -C $(SDK_DIR) clean
 	rm $(BUILD) -rf
