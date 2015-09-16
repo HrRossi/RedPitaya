@@ -18,7 +18,7 @@ SRCS = $(subst .o,.c, $(OBJS)))
 TARGET=rp_remote_acquire
 
 # GCC compiling & linking flags
-CFLAGS=-g -std=gnu99 -Wall -Werror
+CFLAGS=-g -std=gnu99 -Wall -Werror -I../../OS/driver/rpad/src
 
 # Additional libraries which needs to be dynamically linked to the executable
 # -lm - System math library (used by cos(), sin(), sqrt(), ... functions)

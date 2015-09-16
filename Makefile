@@ -87,7 +87,7 @@ $(BUILD):
 	mkdir $(BUILD)
 
 # Linux build provides: uImage kernel, dtc compiler.
-$(LINUX): $(BUILD)
+$(LINUX): $(BUILD) $(UBOOT)
 	make -C $(LINUX_DIR) CROSS_COMPILE=arm-xilinx-linux-gnueabi-
 	make -C $(LINUX_DIR) install INSTALL_DIR=$(abspath $(BUILD))
 
