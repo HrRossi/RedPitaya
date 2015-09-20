@@ -6,4 +6,7 @@
 # network configuration is static.
 # echo "nameserver <DNS_IP>" > /tmp/resolv.conf
 
+# Load the RP architecture driver
+insmod /opt/bin/rpad.ko
+
 echo "Feel free to add custom initialization commands here."

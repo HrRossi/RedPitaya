@@ -6,12 +6,13 @@
 #   dhcp   - Use DHCP + Zeroconf/avahi fallback.
 #   static - Use Static IP, NETMASK & GATEWAY as specified below.
 
-NETWORK=static
+NETWORK=dhcp
 
 # Static network configuration parameters (active if NETWORK=static)
-IP=192.168.10.2
+IP=192.168.1.100
 NETMASK=255.255.255.0
-GATEWAY=192.168.10.1
+GATEWAY=192.168.1.1
+
 
 # WiFi configuration
 #
@@ -24,4 +25,3 @@ GATEWAY=192.168.10.1
 #         Internet from the Red Pitaya WiFi network.
 #
 WIFI=ap
-

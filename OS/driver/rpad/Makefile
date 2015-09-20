@@ -6,7 +6,7 @@ INSTALL_DIR ?= .
 all:
 	make -C $(SRC_DIR)
 
-install: all
+install: $(SRC_DIR)/rpad.ko
 	mkdir -p $(INSTALL_DIR)/bin/
 	cp $(SRC_DIR)/rpad.ko $(INSTALL_DIR)/bin
 
