@@ -269,7 +269,7 @@ always @(posedge axi_clk_i) begin
     end
 end
 
-assign  axi_rready_o = 1'd1;        // the BRAM is always ready
+assign  axi_rready_o = 1'b1;        // the BRAM is always ready
 assign  buf_select_o = buf_select;
 assign  buf_waddr_o  = buf_waddr;
 assign  buf_wdata_o  = buf_wdata;
@@ -683,7 +683,7 @@ assign  axi_awvalid_o = ddr_aw_valid;
 assign  axi_wdata_o   = buf_rdata_i;
 assign  axi_wlast_o   = (buf_rp[3:0] == 4'b1111); // fixed 16 beat burst
 assign  axi_wvalid_o  = burst_in_pr;
-assign  axi_bready_o  = 1'd1;
+assign  axi_bready_o  = 1'b1;
 
 
 // --------------------------------------------------------------------------------------------------
@@ -750,7 +750,7 @@ always @(posedge axi_clk_i) begin
         ddr_a_prev <= 1'b0;
         ddr_b_prev <= 1'b0;
     end else begin
-        if (ddr_a_curr[1] ^ ddr_a_prev) begin
+        if (ddr_a_curr[12] ^ ddr_a_prev) begin
             ddr_status[0] <= 1'b1;
         end else if (ddr_stat_rd_i) begin
             ddr_status[0] <= 1'b0;
@@ -758,7 +758,7 @@ always @(posedge axi_clk_i) begin
             ddr_status[0] <= ddr_status[0];
         end
 
-        if (ddr_b_curr[1] ^ ddr_b_prev) begin
+        if (ddr_b_curr[12] ^ ddr_b_prev) begin
             ddr_status[1] <= 1'b1;
         end else if (ddr_stat_rd_i) begin
             ddr_status[1] <= 1'b0;
@@ -767,16 +767,16 @@ always @(posedge axi_clk_i) begin
         end
 
         //if (ddr_control_i[4] & !ddr_status[0] & (ddr_a_curr >= ddr_a_thrsh_i) | (ddr_control_i[5] & !ddr_status[1] & (ddr_b_curr >= ddr_b_thrsh_i))) begin
-        if ((ddr_control_i[4] & !ddr_status[0] & (ddr_a_curr[1] ^ ddr_a_prev)) |
-            (ddr_control_i[5] & !ddr_status[1] & (ddr_b_curr[1] ^ ddr_b_prev))) begin
+        if ((ddr_control_i[4] & !ddr_status[0] & (ddr_a_curr[12] ^ ddr_a_prev)) |
+            (ddr_control_i[5] & !ddr_status[1] & (ddr_b_curr[12] ^ ddr_b_prev))) begin
             ddr_irq0 <= 1'b1;
         end else if (ddr_stat_rd_i) begin
             ddr_irq0 <= 1'b0;
         end else begin
             ddr_irq0 <= ddr_irq0;
         end
-        ddr_a_prev <= ddr_a_curr[1];
-        ddr_b_prev <= ddr_b_curr[1];
+        ddr_a_prev <= ddr_a_curr[12];
+        ddr_b_prev <= ddr_b_curr[12];
     end
 end
 

@@ -73,6 +73,9 @@ module red_pitaya_scope
    input                 trig_ext_i      ,  //!< external trigger
    input                 trig_asg_i      ,  //!< ASG trigger
 
+    // ADC timestamp reset
+    input                   adc_ts_reset_i  ,   // reset timestamp counter
+
    // System bus
    input                 sys_clk_i       ,  //!< bus clock
    input                 sys_rstn_i      ,  //!< bus reset - active low
@@ -109,9 +112,10 @@ module red_pitaya_scope
 
 // ID values to be read by the device driver, mapped at 40100ff0 - 40100fff
 localparam SYS_ID = 32'h00200002; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
-localparam SYS_1 = 32'h00000000;
-localparam SYS_2 = 32'h00000000;
-localparam SYS_3 = 32'h00000000;
+localparam SYS_1  = 32'h00000000;
+localparam SYS_2  = 32'h00000000;
+localparam SYS_3  = 32'h00000000;
+genvar CNT;
 
 
 wire [ 32-1: 0] addr         ;
@@ -125,7 +129,18 @@ reg             adc_arm_do   ;
 reg             adc_rst_do   ;
 
 
+// --------------------------------------------------------------------------------------------------
+// Timestamp counter
+reg  [63:0] timestamp;
+reg  [63:0] adc_ts_reload;
 
+always @(posedge adc_clk_i) begin
+    if (adc_ts_reset_i) begin
+        timestamp <= adc_ts_reload;
+    end else begin
+        timestamp <= timestamp + 64'h1;
+    end
+end
 
 
 //---------------------------------------------------------------------------------
@@ -248,8 +263,11 @@ end
 //---------------------------------------------------------------------------------
 //  ADC buffer RAM
 
-wire    [64-1:0]    buf_a_data_o;
-wire    [64-1:0]    buf_b_data_o;
+wire [63:0] buf_a_data_o;
+wire [63:0] buf_b_data_o;
+reg         adc_ts_en;
+reg  [10:0] adc_buf_wp;
+reg  [63:0] adc_buf_trg;
 
 localparam RSZ = 14 ;  // RAM size 2^RSZ
 
@@ -272,6 +290,8 @@ reg   [  32-1: 0] set_dly       ;
 reg   [  32-1: 0] adc_dly_cnt   ;
 reg               adc_dly_do    ;
 
+reg  [63:0] header_a1 [0:7];
+reg  [31:0] header_a2 [0:7];
 BRAM_SDP_MACRO #(
     .BRAM_SIZE("36Kb"),             // Target BRAM, "18Kb" or "36Kb" 
     .DEVICE("7SERIES"),             // Target device: "7SERIES" 
@@ -292,11 +312,13 @@ BRAM_SDP_MACRO #(
     .REGCE  (1'b0               ),  // 1-bit input read output register enable
     .RST    (!adcbuf_rstn_i     ),  // 1-bit input reset      
     .WE     ({2{adc_we}}        ),  // Input write enable, width defined by write port depth
-    .WRADDR (adc_wp[10:0]       ),  // Input write address, width defined by write port depth
+    .WRADDR (adc_buf_wp         ),  // Input write address, width defined by write port depth
     .WRCLK  (adc_clk_i          ),  // 1-bit input write clock
     .WREN   (adc_dv             )   // 1-bit input write port enable
 );
 
+reg  [63:0] header_b1 [0:7];
+reg  [31:0] header_b2 [0:7];
 BRAM_SDP_MACRO #(
     .BRAM_SIZE("36Kb"),             // Target BRAM, "18Kb" or "36Kb" 
     .DEVICE("7SERIES"),             // Target device: "7SERIES" 
@@ -317,13 +339,24 @@ BRAM_SDP_MACRO #(
     .REGCE  (1'b0               ),  // 1-bit input read output register enable
     .RST    (!adcbuf_rstn_i     ),  // 1-bit input reset      
     .WE     ({2{adc_we}}        ),  // Input write enable, width defined by write port depth
-    .WRADDR (adc_wp[10:0]       ),  // Input write address, width defined by write port depth
+    .WRADDR (adc_buf_wp         ),  // Input write address, width defined by write port depth
     .WRCLK  (adc_clk_i          ),  // 1-bit input write clock
     .WREN   (adc_dv             )   // 1-bit input write port enable
 );
 
-assign adcbuf_rdata_o = {64{(adcbuf_select_i == 2'b01)}} & buf_a_data_o |
-                        {64{(adcbuf_select_i == 2'b10)}} & buf_b_data_o;
+// put the requested data on the bus. if timestamping is enabled, replace samples 0-5 with header every 256 samples
+wire read_head_a1 = (adcbuf_select_i == 2'b01) &   adc_ts_en & (adcbuf_raddr_i[5:0] == 6'b000000);
+wire read_head_a2 = (adcbuf_select_i == 2'b01) &   adc_ts_en & (adcbuf_raddr_i[5:0] == 6'b000001);
+wire read_data_a  = (adcbuf_select_i == 2'b01) & (!adc_ts_en | (adcbuf_raddr_i[5:1] != 5'b00000));
+wire read_head_b1 = (adcbuf_select_i == 2'b10) &   adc_ts_en & (adcbuf_raddr_i[5:0] == 6'b000000);
+wire read_head_b2 = (adcbuf_select_i == 2'b10) &   adc_ts_en & (adcbuf_raddr_i[5:0] == 6'b000001);
+wire read_data_b  = (adcbuf_select_i == 2'b10) & (!adc_ts_en | (adcbuf_raddr_i[5:1] != 5'b00000));
+assign adcbuf_rdata_o = {64{read_head_a1}} &  header_a1[adcbuf_raddr_i[8:6]]                     |
+                        {64{read_head_a2}} & {header_a2[adcbuf_raddr_i[8:6]],buf_a_data_o[31:0]} |
+                        {64{read_data_a}}  &                                 buf_a_data_o        |
+                        {64{read_head_b1}} &  header_b1[adcbuf_raddr_i[8:6]]                     |
+                        {64{read_head_b2}} & {header_b2[adcbuf_raddr_i[8:6]],buf_b_data_o[31:0]} |
+                        {64{read_data_b}}  &                                 buf_b_data_o;
 
 (* ASYNC_REG="true" *)  reg     [2:0]   addr_sync;
 
@@ -331,7 +364,7 @@ always @(posedge adcbuf_clk_i) begin
     if (!adcbuf_rstn_i) begin
         addr_sync <= 3'b000;
     end else begin
-        addr_sync <= {addr_sync[1:0],adc_wp[10]}; // DDR BRAM buffer has 11 address bits on the write side
+        addr_sync <= {addr_sync[1:0],adc_buf_wp[10]};
     end
 end
 
@@ -350,6 +383,40 @@ always @(posedge adc_clk_i) begin
         adc_wp_cur  <= {RSZ{1'b0}};
         adc_dly_cnt <= 32'h0      ;
         adc_dly_do  <=  1'b0      ;
+        adc_buf_wp  <= 11'h000;
+        adc_buf_trg <= 64'h0;
+        header_a1[0] <= 64'h0;
+        header_a2[0] <= 32'h0;
+        header_b1[0] <= 64'h0;
+        header_b2[0] <= 32'h1;
+        header_a1[1] <= 64'h0;
+        header_a2[1] <= 32'h0;
+        header_b1[1] <= 64'h0;
+        header_b2[1] <= 32'h1;
+        header_a1[2] <= 64'h0;
+        header_a2[2] <= 32'h0;
+        header_b1[2] <= 64'h0;
+        header_b2[2] <= 32'h1;
+        header_a1[3] <= 64'h0;
+        header_a2[3] <= 32'h0;
+        header_b1[3] <= 64'h0;
+        header_b2[3] <= 32'h1;
+        header_a1[4] <= 64'h0;
+        header_a2[4] <= 32'h0;
+        header_b1[4] <= 64'h0;
+        header_b2[4] <= 32'h1;
+        header_a1[5] <= 64'h0;
+        header_a2[5] <= 32'h0;
+        header_b1[5] <= 64'h0;
+        header_b2[5] <= 32'h1;
+        header_a1[6] <= 64'h0;
+        header_a2[6] <= 32'h0;
+        header_b1[6] <= 64'h0;
+        header_b2[6] <= 32'h1;
+        header_a1[7] <= 64'h0;
+        header_a2[7] <= 32'h0;
+        header_b1[7] <= 64'h0;
+        header_b2[7] <= 32'h1;
     end else begin
         if (adc_arm_do)
             adc_we <= 1'b1 ;
@@ -383,6 +450,32 @@ always @(posedge adc_clk_i) begin
         else if (!adc_dly_do)
             adc_dly_cnt <= set_dly ;
 
+        if (adc_rst_do) begin
+            if (adc_ts_en) begin
+                adc_buf_wp <= 11'h006;
+            end else begin
+                adc_buf_wp <= 11'h000;
+            end
+        end else if (adc_we & adc_dv) begin
+            if (adc_ts_en & (adc_buf_wp[7:0] == 8'hff)) begin
+                adc_buf_wp <= adc_buf_wp + 11'h007;
+            end else begin
+                adc_buf_wp <= adc_buf_wp + 11'h001;
+            end
+        end
+
+        if (adc_rst_do) begin
+            adc_buf_trg <= 64'h0;
+        end else if (adc_trig & !adc_dly_do) begin
+            adc_buf_trg <= timestamp;
+        end
+
+        if (!adc_rst_do & adc_we & adc_dv) begin
+            if (adc_buf_wp[7:0] == 8'h06) begin
+                header_a1[adc_buf_wp[10:8]] <= timestamp;
+                header_b1[adc_buf_wp[10:8]] <= timestamp;
+            end
+        end
     end
 end
 
@@ -634,6 +727,8 @@ reg  [  32-1:0] ddr_a_thrsh;    // DDR ChA interrupt threshold
 reg  [  32-1:0] ddr_b_thrsh;    // DDR ChB interrupt threshold
 reg  [   6-1:0] ddr_control;    // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: threshold INT enable A/B
 reg             ddr_stat_rd;    // DDR INT pending was read
+reg             timest_w;       // timestamp write sequence
+reg  [    31:0] timest_rh;      // timestamp write high register
 
 assign ddr_a_base_o  = ddr_a_base;
 assign ddr_a_end_o   = ddr_a_end;
@@ -669,6 +764,10 @@ always @(posedge adc_clk_i) begin
         ddr_b_thrsh <= 32'h00000000;
         ddr_control <= 6'b000000;
         ddr_stat_rd <= 1'b0;
+        adc_ts_en   <= 1'b0;
+        timest_w    <= 1'b0;
+        timest_rh   <= 32'h0;
+        adc_ts_reload <= 64'h0;
    end
    else begin
       if (wen) begin
@@ -689,20 +788,17 @@ always @(posedge adc_clk_i) begin
          if (addr[19:0]==20'h48)   set_b_filt_kk <= wdata[25-1:0] ;
          if (addr[19:0]==20'h4C)   set_b_filt_pp <= wdata[25-1:0] ;
 
-            if (addr[19:0] == 20'h100)  ddr_control <= wdata[6-1:0];
+            if (addr[19:0] == 20'h100)  {adc_ts_en,ddr_control} <= {wdata[31],wdata[5:0]};
             if (addr[19:0] == 20'h104)  ddr_a_base  <= wdata;
             if (addr[19:0] == 20'h108)  ddr_a_end   <= wdata;
             if (addr[19:0] == 20'h10c)  ddr_b_base  <= wdata;
             if (addr[19:0] == 20'h110)  ddr_b_end   <= wdata;
             if (addr[19:0] == 20'h11c)  ddr_a_thrsh <= wdata;
             if (addr[19:0] == 20'h120)  ddr_b_thrsh <= wdata;
+            if ( addr[19:0] == 20'h128) begin timest_w <= 1'b1; timest_rh <= wdata; end
+            else                              timest_w <= 1'b0;
+            if ((addr[19:0] == 20'h12c) & timest_w) adc_ts_reload <= {timest_rh,wdata};
       end
-
-        if (ren & (addr[19:0] == 20'h00100)) begin
-            ddr_stat_rd <= 1'b1;
-        end else begin
-            ddr_stat_rd <= 1'b0;
-        end
    end
 end
 
@@ -738,7 +834,7 @@ always @(*) begin
      20'h00048 : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_kk}      ; end
      20'h0004C : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_pp}      ; end
 
-    20'h00100:  begin   ack <= 1'b1; rdata <= {{32-2{1'b0}},ddr_status_i};  end
+    20'h00100:  begin   ack <= 1'b1; rdata <= {adc_ts_en,{32-1-6{1'b0}},ddr_control};  end
     20'h00104:  begin   ack <= 1'b1; rdata <= ddr_a_base;   end
     20'h00108:  begin   ack <= 1'b1; rdata <= ddr_a_end;    end
     20'h0010c:  begin   ack <= 1'b1; rdata <= ddr_b_base;   end
@@ -747,6 +843,9 @@ always @(*) begin
     20'h00118:  begin   ack <= 1'b1; rdata <= ddr_b_curr_i; end
     20'h0011c:  begin   ack <= 1'b1; rdata <= ddr_a_thrsh;  end
     20'h00120:  begin   ack <= 1'b1; rdata <= ddr_b_thrsh;  end
+    20'h00124:  begin   ack <= 1'b1; rdata <= {{32-2{1'b0}},ddr_status_i};  end
+    20'h00128:  begin   ack <= 1'b1; rdata <= adc_buf_trg[63:32];   end
+    20'h0012c:  begin   ack <= 1'b1; rdata <= adc_buf_trg[31: 0];   end
 
     20'h00ff0:  begin   ack <= 1'b1; rdata <= SYS_ID;       end
     20'h00ff4:  begin   ack <= 1'b1; rdata <= SYS_1;        end
@@ -758,6 +857,8 @@ always @(*) begin
 
        default : begin ack <= 1'b1;          rdata <=  32'h0                              ; end
    endcase
+
+    ddr_stat_rd <= ren & (addr[19:0] == 20'h00124);
 end
 
 

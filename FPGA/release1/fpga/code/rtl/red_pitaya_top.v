@@ -237,13 +237,13 @@ reg             sysconf_cs;
 // control signals sys_cs[], sys_wen[], sys_ren[], sysconf_cs
 
 always @(sys_addr) begin
-    sys_cs = {SYSR{1'b0}};
+    sys_cs <= {SYSR{1'b0}};
     if (sys_addr[29:20] < SYSR) begin
-        sys_cs[sys_addr[29:20]] = 1'b1;
+        sys_cs[sys_addr[29:20]] <= 1'b1;
     end
-    sysconf_cs = 1'b0;
+    sysconf_cs <= 1'b0;
     if (sys_addr[29:20] == 10'h3ff) begin
-        sysconf_cs = 1'b1;
+        sysconf_cs <= 1'b1;
     end
 end
 
