@@ -40,6 +40,7 @@ struct option_fields_
 {
 	char address[16];
 	int port;
+	int port2;
 	int tcp;
 	enum mode_e mode;
 	size_t kbytes_to_transfer;

@@ -40,6 +40,7 @@
 #include <fcntl.h>
 #include <sys/uio.h>
 #include <sys/ioctl.h>
+#include <pthread.h>
 #include <rp_scope.h>
 
 #include "options.h"
@@ -51,20 +52,90 @@
 /******************************************************************************
  * Defines
  ******************************************************************************/
+#define BLOCK_SIZE  16384
+#define BUFFER_SIZE 16 * BLOCK_SIZE
+
 #define min(x, y) (((x) < (y)) ? (x) : (y))
+/* note: the circular buffer macros may evaluate each of their arguments once, more
+ *       than once or not at all. */
+#define CIRCULAR(arg, size) \
+	((arg) % (size))
+#define CIRCULAR_ADD(arg1, arg2, size) \
+	(((arg1) + (arg2)) % (size))
+#define CIRCULAR_SUB(arg1, arg2, size) \
+	((arg1) >= (arg2) ? (arg1) - (arg2) : (size) + (arg1) - (arg2))
+#define CIRCULAR_DIST(argfrom, argto, size) \
+	CIRCULAR_SUB((argto), (argfrom), (size))
+#define CIRCULARSRC_MEMCPY(dst, src_base, src_offs, src_size, length) \
+	do { \
+		if ((src_offs) + (length) <= (src_size)) { \
+			memcpy((dst), (void *)(src_base) + (src_offs), (length)); \
+		} else { \
+			unsigned int __len1 = (src_size) - (src_offs); \
+			memcpy((dst), (void *)(src_base) + (src_offs), __len1); \
+			memcpy((void *)(dst) + __len1, (src_base), (length) - __len1); \
+		} \
+	} while (0)
+#define CIRCULAR_MEMCPY(dst_base, dst_offs, dst_size, src_base, src_offs, src_size, length) \
+	do { \
+		if ((src_offs) + (length) <= (src_size)) { \
+			if ((dst_offs) + (length) <= (dst_size)) { \
+				memcpy((void *)(dst_base) + (dst_offs), (void *)(src_base) + (src_offs), (length)); \
+			} else { \
+				unsigned int __len = (dst_size) - (dst_offs); \
+				memcpy((void *)(dst_base) + (dst_offs), (void *)(src_base) + (src_offs), __len); \
+				memcpy((dst_base), (void *)(src_base) + ((src_offs) + __len), (length) - __len); \
+			} \
+		} else { \
+			unsigned int __len1 = (src_size) - (src_offs); \
+			if ((dst_offs) + (length) <= (dst_size)) { \
+				memcpy((void *)(dst_base) + (dst_offs), (void *)(src_base) + (src_offs), __len1); \
+				memcpy((void *)(dst_base) + ((dst_offs) + __len1), (src_base), (length) - __len1); \
+			} else { \
+				unsigned int __len2 = (dst_size) - (dst_offs); \
+				if (__len1 == __len2) { \
+					memcpy((void *)(dst_base) + (dst_offs), (void *)(src_base) + (src_offs), __len1); \
+					memcpy((dst_base), (src_base), (length) - __len1); \
+				} else if (__len1 < __len2) { \
+					memcpy((void *)(dst_base) + (dst_offs), (void *)(src_base) + (src_offs), __len1); \
+					memcpy((void *)(dst_base) + ((dst_offs) + __len1), (src_base), __len2 - __len1); \
+					memcpy((dst_base), (void *)(src_base) + (__len2 - __len1), (length) - __len2); \
+				} else { \
+					memcpy((void *)(dst_base) + (dst_offs), (void *)(src_base) + (src_offs), __len2); \
+					memcpy((dst_base), (void *)(src_base) + ((src_offs) + __len2), __len1 - __len2); \
+					memcpy((void *)(dst_base) + (__len1 - __len2), (src_base), (length) - __len1); \
+				} \
+			} \
+		} \
+	} while (0)
 
 /******************************************************************************
  * Typedefs
  ******************************************************************************/
+struct queue {
+	pthread_mutex_t mutex;
+	pthread_t       sender;
+	int             started;
+	unsigned int    write_pos;
+	unsigned int    read_pos;
+	uint8_t         *buf;
+	int             sock_fd;
+};
 
 /******************************************************************************
  * static function prototypes
  ******************************************************************************/
 static void int_handler(int sig);
+static int setup_threads(int sock_fd, int sock_fd2);
+static void teardown_threads(void);
 static u_int64_t transfer_readwrite(int sock_fd, struct scope_parameter *param,
                                     option_fields_t *options);
 static u_int64_t transfer_buf_mmap(int sock_fd, struct scope_parameter *param,
                                    option_fields_t *options);
+static u_int64_t transfer_buf_mmap_dual(struct queue *a, struct queue *b,
+                                        struct scope_parameter *param,
+                                        option_fields_t *options);
+static void *send_worker(void *data);
 static u_int64_t transfer_buf_mmapfile(struct scope_parameter *param,
                                        option_fields_t *options);
 static int send_buffer(int sock_fd, option_fields_t *options, const char *buf, size_t len);
@@ -79,9 +150,27 @@ static struct sigaction sa = {
 	.sa_handler = int_handler,
 };
 
+static struct queue queue_a = {
+	.mutex = PTHREAD_MUTEX_INITIALIZER,
+	.started = 0,
+	.write_pos = 0,
+	.read_pos = 0,
+	.buf = NULL,
+	.sock_fd = -1,
+};
+static struct queue queue_b = {
+	.mutex = PTHREAD_MUTEX_INITIALIZER,
+	.started = 0,
+	.write_pos = 0,
+	.read_pos = 0,
+	.buf = NULL,
+	.sock_fd = -1,
+};
+
 static int sock_fd = -1;
+static int sock_fd2 = -1;
 static int server_sock_fd = -1;
-static struct sockaddr_in srv_addr, cli_addr;
+static struct sockaddr_in srv_addr, srv_addr2, cli_addr;
 
 /******************************************************************************
  * non-static function definitions
@@ -109,13 +198,24 @@ int connection_init(option_fields_t *options)
 	sock_fd = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
 	if (sock_fd < 0) {
 		fprintf(stderr, "create socket failed, %s\n", strerror(errno));
-		goto error;
+		goto error_close;
+	}
+	if (options->scope_chn == 2) {
+		sock_fd2 = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+		if (sock_fd2 < 0) {
+			fprintf(stderr, "create socket failed, %s\n", strerror(errno));
+			goto error_close;
+		}
 	}
 
 	memset(&srv_addr, 0, sizeof(srv_addr));
 	srv_addr.sin_family = AF_INET;
 	srv_addr.sin_addr.s_addr = inet_addr(options->address);
 	srv_addr.sin_port = htons(options->port);
+	memset(&srv_addr2, 0, sizeof(srv_addr2));
+	srv_addr2.sin_family = AF_INET;
+	srv_addr2.sin_addr.s_addr = srv_addr.sin_addr.s_addr;
+	srv_addr2.sin_port = htons(options->port2);
 
 	if (options->mode == server) {
 		int optval = 1;
@@ -146,24 +246,42 @@ error_close:
 		close(sock_fd);
 		sock_fd = -1;
 	}
-error:
+	if (sock_fd2 >= 0) {
+		close(sock_fd2);
+		sock_fd2 = -1;
+	}
 	return -1;
 }
 
-int connection_start(option_fields_t *options)
+int connection_start(option_fields_t *options, int *p_sock_fd, int *p_sock_fd2)
 {
 	if (options->mode == client) {
+		int do_sleep = 0;
 		if (sock_fd < 0) {
 			sock_fd = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
 			if (sock_fd < 0) {
 				fprintf(stderr, "create socket failed, %s\n", strerror(errno));
-				goto error;
+				goto error_close;
 			}
-
-			usleep(100000); /* sleep 0.1s before reconnecting */
+			do_sleep = 1;
 		}
+		if (options->scope_chn == 2 && sock_fd2 < 0) {
+			sock_fd2 = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+			if (sock_fd2 < 0) {
+				fprintf(stderr, "create socket failed, %s\n", strerror(errno));
+				goto error_close;
+			}
+			do_sleep = 1;
+		}
+		if (do_sleep)
+			usleep(100000); /* sleep 0.1s before reconnecting */
 
 		if (connect(sock_fd, (struct sockaddr *)&srv_addr, sizeof(srv_addr)) < 0) {
+			fprintf(stderr, "connect failed, %s\n", strerror(errno));
+			goto error_close;
+		}
+		if (options->scope_chn == 2 &&
+		    connect(sock_fd2, (struct sockaddr *)&srv_addr2, sizeof(srv_addr2)) < 0) {
 			fprintf(stderr, "connect failed, %s\n", strerror(errno));
 			goto error_close;
 		}
@@ -176,13 +294,19 @@ int connection_start(option_fields_t *options)
 			goto error;
 		}
 	}
+	*p_sock_fd = sock_fd;
+	*p_sock_fd2 = sock_fd2;
 
-	return sock_fd;
+	return 0;
 
 error_close:
 	if (sock_fd >= 0) {
 		close(sock_fd);
 		sock_fd = -1;
+	}
+	if (sock_fd2 >= 0) {
+		close(sock_fd2);
+		sock_fd2 = -1;
 	}
 error:
 	return -1;
@@ -190,8 +314,14 @@ error:
 
 void connection_stop(void)
 {
-	close(sock_fd);
-	sock_fd = -1;
+	if (sock_fd >= 0) {
+		close(sock_fd);
+		sock_fd = -1;
+	}
+	if (sock_fd2 >= 0) {
+		close(sock_fd2);
+		sock_fd2 = -1;
+	}
 }
 
 void connection_cleanup(void)
@@ -200,20 +330,28 @@ void connection_cleanup(void)
 		close(sock_fd);
 		sock_fd = -1;
 	}
+	if (sock_fd2 >= 0) {
+		close(sock_fd2);
+		sock_fd2 = -1;
+	}
 	if (server_sock_fd >= 0) {
 		close(server_sock_fd);
 		server_sock_fd = -1;
 	}
 }
 
-int transfer_data(int sock_fd, struct scope_parameter *param,
+int transfer_data(int sock_fd, int sock_fd2, struct scope_parameter *param,
                   option_fields_t *options)
 {
-	int retval = 0;
 	unsigned long duration = 0UL;
 	u_int64_t transferred = 0ULL;
 	struct timeval start_time, end_time;
 	int report_rate = options->report_rate;
+
+	if (options->scope_chn == 2 && setup_threads(sock_fd, sock_fd2) < 0) {
+		teardown_threads();
+		return -1;
+	}
 
 	if (report_rate && gettimeofday(&start_time, NULL))
 		report_rate = 0;
@@ -221,6 +359,8 @@ int transfer_data(int sock_fd, struct scope_parameter *param,
 	if (options->mode == client || options->mode == server) {
 		if (0) /* TODO depending on mmap success */
 			transferred = transfer_readwrite(sock_fd, param, options);
+		else if (options->scope_chn == 2)
+			transferred = transfer_buf_mmap_dual(&queue_a, &queue_b, param, options);
 		else
 			transferred = transfer_buf_mmap(sock_fd, param, options);
 	} else if (options->mode == file) {
@@ -239,7 +379,10 @@ int transfer_data(int sock_fd, struct scope_parameter *param,
 		       (double)(1000ULL * transferred) / (1024ULL * 1024ULL * duration));
 	}
 
-	return retval;
+	if (options->scope_chn == 2)
+		teardown_threads();
+
+	return 0;
 }
 
 int transfer_interrupted(void)
@@ -253,6 +396,58 @@ int transfer_interrupted(void)
 static void int_handler(int sig)
 {
 	interrupted = 1;
+}
+
+static int setup_threads(int sock_fd, int sock_fd2)
+{
+	int rc;
+
+	/* allocate cacheable buffers */
+	queue_a.buf = malloc(BUFFER_SIZE);
+	queue_b.buf = malloc(BUFFER_SIZE);
+	if (queue_a.buf == NULL || queue_b.buf == NULL) {
+		fprintf(stderr, "malloc failed, %s - buf a %p buf b %p\n",
+		        strerror(errno), queue_a.buf, queue_b.buf);
+		return -1;
+	}
+
+	queue_a.sock_fd = sock_fd;
+	queue_b.sock_fd = sock_fd2;
+
+	/* start socket senders */
+	rc = pthread_create(&queue_a.sender, NULL, send_worker, &queue_a);
+	if (rc != 0) {
+		fprintf(stderr, "start sender A failed, %s\n", strerror(rc));
+		return -1;
+	}
+	queue_a.started = 1;
+
+	rc = pthread_create(&queue_b.sender, NULL, send_worker, &queue_b);
+	if (rc != 0) {
+		fprintf(stderr, "start sender B failed, %s\n", strerror(rc));
+		return -1;
+	}
+	queue_b.started = 1;
+
+	return 0;
+}
+
+static void teardown_threads()
+{
+	/* cleanup */
+	if (queue_a.started) {
+		pthread_cancel(queue_a.sender);
+		pthread_join(queue_a.sender, NULL);
+	}
+	if (queue_b.started) {
+		pthread_cancel(queue_b.sender);
+		pthread_join(queue_b.sender, NULL);
+	}
+
+	if (queue_a.buf)
+		free(queue_a.buf);
+	if (queue_b.buf)
+		free(queue_b.buf);
 }
 
 /*
@@ -357,6 +552,142 @@ static u_int64_t transfer_buf_mmap(int sock_fd, struct scope_parameter *param,
 	free(buf);
 
 	return transferred;
+}
+
+/*
+ * reads samples from dma ram and puts them on the channel queues if enough free
+ * space is available on the queue (measured by the difference between
+ * queue->read_pos and queue->write_pos). advances each queue's write_pos for
+ * each block that was copied. rinse and repeat. access to write_pos and
+ * read_pos is protected by queue->mutex.
+ */
+static u_int64_t transfer_buf_mmap_dual(struct queue *a, struct queue *b,
+                                        struct scope_parameter *param,
+                                        option_fields_t *options)
+{
+	u_int64_t transferred = 0ULL;
+	u_int64_t size = 1024ULL * options->kbytes_to_transfer;
+	unsigned long pos_a = 0, pos_b = 0;
+	unsigned long curr_a, curr_b;
+	unsigned long *curr_addr_a, *curr_addr_b;
+	unsigned long base_a, base_b;
+	void *mapped_base_a, *mapped_base_b;
+	size_t buf_size_a, buf_size_b;
+	size_t len;
+	unsigned int read_pos_a, read_pos_b;
+	unsigned int write_pos_a = 0, write_pos_b = 0;
+	int did_something;
+
+	curr_addr_a = param->mapped_io + 0x114;
+	curr_addr_b = param->mapped_io + 0x118;
+	base_a = *(unsigned long *)(param->mapped_io + 0x104);
+	base_b = *(unsigned long *)(param->mapped_io + 0x10c);
+	mapped_base_a = param->mapped_buf_a;
+	mapped_base_b = param->mapped_buf_b;
+	buf_size_a = param->buf_a_size;
+	buf_size_b = param->buf_b_size;
+
+	while (!interrupted && (!size || transferred < size)) {
+		did_something = 0;
+
+		if (pthread_mutex_lock(&a->mutex) != 0)
+			break;
+		a->write_pos = write_pos_a;
+		read_pos_a = a->read_pos;
+		if (pthread_mutex_unlock(&a->mutex) != 0)
+			break;
+
+		if (CIRCULAR_DIST(read_pos_a, write_pos_a, BUFFER_SIZE) < BUFFER_SIZE - BLOCK_SIZE) {
+			curr_a = *curr_addr_a - base_a;
+
+			len = CIRCULAR_DIST(pos_a, curr_a, buf_size_a);
+
+			if (len > 0) {
+				if (len > BLOCK_SIZE)
+					len = BLOCK_SIZE;
+				CIRCULAR_MEMCPY(a->buf, write_pos_a, BUFFER_SIZE, mapped_base_a, pos_a, buf_size_a, len);
+				pos_a = CIRCULAR_ADD(pos_a, len, buf_size_a);
+				write_pos_a = CIRCULAR_ADD(write_pos_a, len, BUFFER_SIZE);
+				transferred += len;
+				did_something = 1;
+			}
+		}
+
+		if (pthread_mutex_lock(&b->mutex) != 0)
+			break;
+		b->write_pos = write_pos_b;
+		read_pos_b = b->read_pos;
+		if (pthread_mutex_unlock(&b->mutex) != 0)
+			break;
+
+		if (CIRCULAR_DIST(read_pos_b, write_pos_b, BUFFER_SIZE) < BUFFER_SIZE - BLOCK_SIZE) {
+			curr_b = *curr_addr_b - base_b;
+
+			len = CIRCULAR_DIST(pos_b, curr_b, buf_size_b);
+
+			if (len > 0) {
+				if (len > BLOCK_SIZE)
+					len = BLOCK_SIZE;
+				CIRCULAR_MEMCPY(a->buf, write_pos_b, BUFFER_SIZE, mapped_base_b, pos_b, buf_size_b, len);
+				pos_b = CIRCULAR_ADD(pos_b, len, buf_size_b);
+				write_pos_b = CIRCULAR_ADD(write_pos_b, len, BUFFER_SIZE);
+				transferred += len;
+				did_something = 1;
+			}
+		}
+
+		if (!did_something)
+			usleep(5);
+	}
+
+	return transferred;
+}
+
+/*
+ * sends samples from a struct queue. synchronisation with the queue is done via
+ * queue->write_pos and queue->read_pos. send_worker will send a block of
+ * BLOCK_SIZE bytes whenever the queue holds enough data (measured by the
+ * difference between write_pos and read_pos) and advance read_pos accordingly.
+ * access to write_pos and read_pos is protected by queue->mutex.
+ */
+static void *send_worker(void *data)
+{
+	struct queue *q = (struct queue *)data;
+	unsigned int send_pos = 0;
+	unsigned int write_pos;
+	ssize_t sent;
+	size_t length;
+
+	do {
+		if (pthread_mutex_lock(&q->mutex) != 0)
+			goto send_worker_exit;
+		write_pos = q->write_pos;
+		q->read_pos = send_pos;
+		if (pthread_mutex_unlock(&q->mutex) != 0)
+			goto send_worker_exit;
+
+		if (CIRCULAR_DIST(send_pos, write_pos, BUFFER_SIZE) >= BLOCK_SIZE) {
+			length = BLOCK_SIZE;
+			do {
+				sent = send(q->sock_fd, q->buf + send_pos, length, MSG_NOSIGNAL);
+				if (sent > 0) {
+					send_pos += sent;
+					length -= sent;
+				}
+			} while (sent >= 0 && length > 0);
+
+			if (sent < 0)
+				goto send_worker_exit;
+
+			send_pos = CIRCULAR(send_pos, BUFFER_SIZE);
+		} else {
+			usleep(5);
+		}
+	} while (1);
+
+send_worker_exit:
+	interrupted = 1;
+	return NULL;
 }
 
 /*

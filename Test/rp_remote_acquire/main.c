@@ -59,6 +59,7 @@ static option_fields_t g_options =
 	/* Setting defaults */
 	.address = "",
 	.port = 14000,
+	.port2 = 14001,
 	.tcp = 1,
 	.mode = client,
 	.kbytes_to_transfer = 0,
@@ -78,6 +79,7 @@ int main(int argc, char **argv)
 {
 	int retval;
 	int sock_fd = -1;
+	int sock_fd2 = -1;
 	struct scope_parameter param;
 
 	if(0 != handle_options(argc,argv, &g_options))
@@ -103,13 +105,13 @@ int main(int argc, char **argv)
 	retval = 0;
 	while (!transfer_interrupted()) {
 		if (g_options.mode == client || g_options.mode == server) {
-			if ((sock_fd = connection_start(&g_options)) < 0) {
+			if (connection_start(&g_options, &sock_fd, &sock_fd2) < 0) {
 				fprintf(stderr, "%s: problem opening connection.\n", __func__);
 				continue;
 			}
 		}
 
-		retval = transfer_data(sock_fd, &param, &g_options);
+		retval = transfer_data(sock_fd, sock_fd2, &param, &g_options);
 		if (retval && !transfer_interrupted())
 			fprintf(stderr, "%s: problem transferring data.\n", __func__);
 

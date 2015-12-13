@@ -61,7 +61,7 @@ int scope_init(struct scope_parameter *param, option_fields_t *options)
 		param->mapped_io = NULL;
 	}
 
-	if (param->channel == 0) {
+	if (param->channel == 0 || param->channel == 2) {
 		/* TODO get phys addr and size from sysfs */
 		param->buf_a_size = 0x00200000;
 		buf_a_addr = RPAD_SCOPE_CHA_BUF;
@@ -74,7 +74,8 @@ int scope_init(struct scope_parameter *param, option_fields_t *options)
 			        errno);
 			param->mapped_buf_a = NULL;
 		}
-	} else {
+	}
+	if (param->channel == 1 || param->channel == 2) {
 		/* TODO get phys addr and size from sysfs */
 		param->buf_b_size = 0x00200000;
 		buf_b_addr = RPAD_SCOPE_CHB_BUF;

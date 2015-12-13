@@ -41,6 +41,7 @@ static struct option g_long_options[] =
 {
 	{"address",            required_argument, NULL, 'a'},
 	{"port",               required_argument, NULL, 'p'},
+	{"secondary_port",     required_argument, NULL, 'q'},
 	{"mode",               required_argument, NULL, 'm'},
 	{"udp",                no_argument,       NULL, 'u'},
 	{"kbytes_to_transfer", required_argument, NULL, 'k'},
@@ -66,7 +67,7 @@ int handle_options(int argc, char *argv[], option_fields_t *options)
 	if (argc <= 1)
 		return -1;
 
-	while ((ch = getopt_long(argc, argv, "a:p:m:uk:f:rhc:d:es", g_long_options, NULL)) != -1)
+	while ((ch = getopt_long(argc, argv, "a:p:q:m:uk:f:rhc:d:es", g_long_options, NULL)) != -1)
 	{
 		// check to see if a single character or long option came through
 		switch (ch)
@@ -77,6 +78,9 @@ int handle_options(int argc, char *argv[], option_fields_t *options)
 			break;
 		case 'p': //Port
 			options->port = atoi(optarg);
+			break;
+		case 'q': // secondary Port
+			options->port2 = atoi(optarg);
 			break;
 		case 'm': //Mode
 			mode = atoi(optarg);
@@ -100,12 +104,18 @@ int handle_options(int argc, char *argv[], option_fields_t *options)
 			options->report_rate = 1;
 			break;
 		case 'c': // Channel
-			if (optarg[0] == 'A' || optarg[0] == 'a')
+			if (!strcasecmp("a", optarg))
 				options->scope_chn = 0;
-			else if (optarg[0] == 'B' || optarg[0] == 'b')
+			else if (!strcasecmp("b", optarg))
 				options->scope_chn = 1;
+			else if (!strcasecmp("ab", optarg))
+				options->scope_chn = 2;
 			else
-				options->scope_chn = (atoi(optarg) == 0) ? 0 : 1;
+				switch (atoi(optarg)) {
+				case 1: options->scope_chn = 1; break;
+				case 2: options->scope_chn = 2; break;
+				default:options->scope_chn = 0; break;
+				}
 			break;
 		case 'd': // Decimation
 			options->scope_dec = atoi(optarg);
@@ -150,18 +160,25 @@ int check_options(option_fields_t *options)
 		strcpy(options->address,"127.0.0.1");
 	}
 
+	if (options->scope_chn == 2 && options->mode != client) {
+		fprintf(stderr,"Dual channel requires client mode\n");
+		return 1;
+	}
+
 	return 0;
 }
 
 void usage(const char *name)
 {
-	printf("Usage: \033[1m%s [-mapukfrhcdes]\033[0m\n", name);
+	printf("Usage: \033[1m%s [-mapqukfrhcdes]\033[0m\n", name);
 	printf("\033[1m-m  --mode <(1|client)|(2|server)|(3|file)>\033[0m\n"
 	       "\toperating mode (default client)\n"
 	       "\033[1m-a  --address <ip_address>\033[0m\n"
 	       "\ttarget address in client mode (default empty)\n"
 	       "\033[1m-p  --port <port_num>\033[0m\n"
 	       "\tport number in client and server mode (default 14000)\n"
+	       "\033[1m-q  --secondary_port <port_num>\033[0m\n"
+	       "\tsecondary port number in dual channel client mode (default 14001)\n"
 	       "\033[1m-u  --udp\033[0m\n"
 	       "\tindicates tool should use udp transfer (default tcp)\n"
 	       "\033[1m-k  --kbytes_to_transfer <num_kbytes>\033[0m\n"
@@ -172,7 +189,7 @@ void usage(const char *name)
 	       "\tturn on rate reporting (default off)\n"
 	       "\033[1m-h  --help\033[0m\n"
 	       "\tdisplay this usage information\n"
-	       "\033[1m-c  --scope-channel <(0|A)|(1|B)>\033[0m\n"
+	       "\033[1m-c  --scope-channel <(0|A)|(1|B)(2|AB)>\033[0m\n"
 	       "\tscope channel (default A)\n"
 	       "\033[1m-d  --scope-decimation <decimation>\033[0m\n"
 	       "\t0,1,2,4,..,65536 (default 32)\n"
