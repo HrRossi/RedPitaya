@@ -18,11 +18,11 @@ SRCS = $(subst .o,.c, $(OBJS)))
 TARGET=rp_remote_acquire
 
 # GCC compiling & linking flags
-CFLAGS=-g -std=gnu99 -Wall -Werror -I../../OS/driver/rpad/src
+CFLAGS=-std=gnu99 -Wall -Werror -I../../OS/driver/rpad/src -pthread
 
 # Additional libraries which needs to be dynamically linked to the executable
 # -lm - System math library (used by cos(), sin(), sqrt(), ... functions)
-LIBS=
+LIBS=-lpthread
 
 # Main GCC executable (used for compiling and linking)
 CC=$(CROSS_COMPILE)gcc
@@ -55,7 +55,7 @@ all: $(TARGET)
 # Makefile target with rules how to link executable for each target from $(TARGET)
 # list.
 $(TARGET): $(OBJS)
-	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
+	$(CC) -o $@ $^ $(LIBS)
 
 # Clean target - when called it cleans all object files and executables.
 clean:
