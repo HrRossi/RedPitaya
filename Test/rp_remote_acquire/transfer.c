@@ -628,7 +628,7 @@ static u_int64_t transfer_buf_mmap_dual(struct queue *a, struct queue *b,
 			if (len > 0) {
 				if (len > BLOCK_SIZE)
 					len = BLOCK_SIZE;
-				CIRCULAR_MEMCPY(a->buf, write_pos_b, BUFFER_SIZE, mapped_base_b, pos_b, buf_size_b, len);
+				CIRCULAR_MEMCPY(b->buf, write_pos_b, BUFFER_SIZE, mapped_base_b, pos_b, buf_size_b, len);
 				pos_b = CIRCULAR_ADD(pos_b, len, buf_size_b);
 				write_pos_b = CIRCULAR_ADD(write_pos_b, len, BUFFER_SIZE);
 				transferred += len;
