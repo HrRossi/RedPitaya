@@ -1,0 +1,52 @@
+Copyright 1986-2015 Xilinx, Inc. All Rights Reserved.
+------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2015.4 (lin64) Build 1412921 Wed Nov 18 09:44:32 MST 2015
+| Date         : Fri Feb 26 20:09:02 2016
+| Host         : debian running 64-bit Debian GNU/Linux 7.9 (wheezy)
+| Command      : upgrade_ip
+| Device       : xc7z010clg400-1
+------------------------------------------------------------------------------------
+
+Upgrade Log for IP 'system_xlconcat_0_0'
+
+1. Summary
+----------
+
+SUCCESS in the upgrade of system_xlconcat_0_0 from xilinx.com:ip:xlconcat:1.0 to xilinx.com:ip:xlconcat:2.1 (Rev. 2)
+
+2. Upgrade messages
+-------------------
+
+Set parameter IN0_WIDTH to value 1 (source 'default')
+Renamed port In0 to In15
+Set parameter IN1_WIDTH to value 1 (source 'default')
+Renamed port In1 to In14
+Set parameter IN2_WIDTH to value 1 (source 'default')
+Renamed port In2 to In13
+Set parameter IN3_WIDTH to value 1 (source 'default')
+Renamed port In3 to In12
+Set parameter IN4_WIDTH to value 1 (source 'default')
+Renamed port In4 to In11
+Set parameter IN5_WIDTH to value 1 (source 'default')
+Renamed port In5 to In10
+Set parameter IN6_WIDTH to value 1 (source 'default')
+Renamed port In6 to In9
+Set parameter IN7_WIDTH to value 1 (source 'default')
+Renamed port In7 to In8
+Set parameter IN8_WIDTH to value 1 (source 'default')
+Renamed port In8 to In7
+Set parameter IN9_WIDTH to value 1 (source 'default')
+Renamed port In9 to In6
+Set parameter IN10_WIDTH to value 1 (source 'default')
+Renamed port In10 to In5
+Set parameter IN11_WIDTH to value 1 (source 'default')
+Renamed port In11 to In4
+Set parameter IN12_WIDTH to value 1 (source 'default')
+Renamed port In12 to In3
+Set parameter IN13_WIDTH to value 1 (source 'default')
+Renamed port In13 to In2
+Set parameter IN14_WIDTH to value 1 (source 'default')
+Renamed port In14 to In1
+Set parameter IN15_WIDTH to value 1 (source 'default')
+Renamed port In15 to In0
+
