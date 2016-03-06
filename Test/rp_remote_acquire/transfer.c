@@ -772,14 +772,9 @@ static int send_buffer(int sock_fd, option_fields_t *options, const char *buf, s
 	int retval = 0;
 	int sent;
 	unsigned int pos;
-	size_t clen;
 
 	for (pos = 0; pos < len; pos += sent) {
-		if (options->tcp)
-			clen = len - pos;
-		else
-			clen = (len - pos >= 512) ? 512 : len - pos;
-		sent = send(sock_fd, buf + pos, clen, MSG_NOSIGNAL);
+		sent = send(sock_fd, buf + pos, len - pos, MSG_NOSIGNAL);
 		if (sent < 0 || interrupted) {
 			retval = -1;
 			break;
