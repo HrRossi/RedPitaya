@@ -45,6 +45,7 @@
 
 #include "options.h"
 #include "scope.h"
+#include "transfer.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -120,25 +121,27 @@ struct queue {
 	unsigned int    read_pos;
 	uint8_t         *buf;
 	int             sock_fd;
+	FILE            *file_fd;
 };
 
 /******************************************************************************
  * static function prototypes
  ******************************************************************************/
 static void int_handler(int sig);
-static int setup_threads(int sock_fd, int sock_fd2);
+static int setup_threads(struct handles *handles);
 static void teardown_threads(void);
-static u_int64_t transfer_readwrite(int sock_fd, struct scope_parameter *param,
-                                    option_fields_t *options);
-static u_int64_t transfer_buf_mmap(int sock_fd, struct scope_parameter *param,
-                                   option_fields_t *options);
-static u_int64_t transfer_buf_mmap_dual(struct queue *a, struct queue *b,
-                                        struct scope_parameter *param,
-                                        option_fields_t *options);
+static u_int64_t transfer_readwrite(struct scope_parameter *param,
+                                    option_fields_t *options,
+                                    struct handles *handles);
+static u_int64_t transfer_buf_mmap(struct scope_parameter *param,
+                                   option_fields_t *options,
+                                   struct handles *handles);
+static u_int64_t transfer_buf_mmap_dual(struct scope_parameter *param,
+                                        option_fields_t *options,
+                                        struct queue *a, struct queue *b);
 static void *send_worker(void *data);
-static u_int64_t transfer_buf_mmapfile(struct scope_parameter *param,
-                                       option_fields_t *options);
-static int send_buffer(int sock_fd, option_fields_t *options, const char *buf, size_t len);
+static int send_buffer(int sock_fd, option_fields_t *options, const char *buf,
+                       size_t len);
 
 /******************************************************************************
  * static variables
@@ -157,6 +160,7 @@ static struct queue queue_a = {
 	.read_pos = 0,
 	.buf = NULL,
 	.sock_fd = -1,
+	.file_fd = NULL,
 };
 static struct queue queue_b = {
 	.mutex = PTHREAD_MUTEX_INITIALIZER,
@@ -165,11 +169,9 @@ static struct queue queue_b = {
 	.read_pos = 0,
 	.buf = NULL,
 	.sock_fd = -1,
+	.file_fd = NULL,
 };
 
-static int sock_fd = -1;
-static int sock_fd2 = -1;
-static int server_sock_fd = -1;
 static struct sockaddr_in srv_addr, srv_addr2, cli_addr;
 
 /******************************************************************************
@@ -193,16 +195,16 @@ void signal_exit(void) {
  * initializes socket according to options
  * returns 0 on success, <0 on error
  */
-int connection_init(option_fields_t *options)
+int connection_init(option_fields_t *options, struct handles *handles)
 {
-	sock_fd = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
-	if (sock_fd < 0) {
+	handles->sock = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+	if (handles->sock < 0) {
 		fprintf(stderr, "create socket failed, %s\n", strerror(errno));
 		goto error_close;
 	}
 	if (options->scope_chn == 2) {
-		sock_fd2 = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
-		if (sock_fd2 < 0) {
+		handles->sock2 = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+		if (handles->sock2 < 0) {
 			fprintf(stderr, "create socket failed, %s\n", strerror(errno));
 			goto error_close;
 		}
@@ -222,52 +224,45 @@ int connection_init(option_fields_t *options)
 
 		srv_addr.sin_addr.s_addr = INADDR_ANY;
 
-		if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval))) {
+		if (setsockopt(handles->sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval))) {
 			fprintf(stderr, "setsockopt failed, %s\n", strerror(errno));
 		}
 
-		if (bind(sock_fd, (struct sockaddr *)&srv_addr, sizeof(srv_addr))) {
+		if (bind(handles->sock, (struct sockaddr *)&srv_addr, sizeof(srv_addr))) {
 			fprintf(stderr, "bind failed, %s\n", strerror(errno));
 			goto error_close;
 		}
-		if (listen(sock_fd, 5)) {
+		if (listen(handles->sock, 5)) {
 			fprintf(stderr, "listen failed, %s\n", strerror(errno));
 			goto error_close;
 		}
 
-		server_sock_fd = sock_fd;
-		sock_fd = -1;
+		handles->server_sock = handles->sock;
+		handles->sock = -1;
 	}
 
 	return 0;
 
 error_close:
-	if (sock_fd >= 0) {
-		close(sock_fd);
-		sock_fd = -1;
-	}
-	if (sock_fd2 >= 0) {
-		close(sock_fd2);
-		sock_fd2 = -1;
-	}
+	connection_stop(handles);
 	return -1;
 }
 
-int connection_start(option_fields_t *options, int *p_sock_fd, int *p_sock_fd2)
+int connection_start(option_fields_t *options, struct handles *handles)
 {
 	if (options->mode == client) {
 		int do_sleep = 0;
-		if (sock_fd < 0) {
-			sock_fd = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
-			if (sock_fd < 0) {
+		if (handles->sock < 0) {
+			handles->sock = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+			if (handles->sock < 0) {
 				fprintf(stderr, "create socket failed, %s\n", strerror(errno));
 				goto error_close;
 			}
 			do_sleep = 1;
 		}
-		if (options->scope_chn == 2 && sock_fd2 < 0) {
-			sock_fd2 = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
-			if (sock_fd2 < 0) {
+		if (options->scope_chn == 2 && handles->sock2 < 0) {
+			handles->sock2 = socket(PF_INET, options->tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
+			if (handles->sock2 < 0) {
 				fprintf(stderr, "create socket failed, %s\n", strerror(errno));
 				goto error_close;
 			}
@@ -276,79 +271,99 @@ int connection_start(option_fields_t *options, int *p_sock_fd, int *p_sock_fd2)
 		if (do_sleep)
 			usleep(100000); /* sleep 0.1s before reconnecting */
 
-		if (connect(sock_fd, (struct sockaddr *)&srv_addr, sizeof(srv_addr)) < 0) {
+		if (connect(handles->sock, (struct sockaddr *)&srv_addr, sizeof(srv_addr)) < 0) {
 			fprintf(stderr, "connect failed, %s\n", strerror(errno));
 			goto error_close;
 		}
 		if (options->scope_chn == 2 &&
-		    connect(sock_fd2, (struct sockaddr *)&srv_addr2, sizeof(srv_addr2)) < 0) {
+		    connect(handles->sock2, (struct sockaddr *)&srv_addr2, sizeof(srv_addr2)) < 0) {
 			fprintf(stderr, "connect failed, %s\n", strerror(errno));
 			goto error_close;
 		}
 	} else {
 		socklen_t cli_len = sizeof(cli_addr);
 
-		sock_fd = accept(server_sock_fd, (struct sockaddr *)&cli_addr, &cli_len);
-		if (sock_fd < 0) {
+		handles->sock = accept(handles->server_sock, (struct sockaddr *)&cli_addr, &cli_len);
+		if (handles->sock < 0) {
 			fprintf(stderr, "accept failed, %s\n", strerror(errno));
 			goto error;
 		}
 	}
-	*p_sock_fd = sock_fd;
-	*p_sock_fd2 = sock_fd2;
 
 	return 0;
 
 error_close:
-	if (sock_fd >= 0) {
-		close(sock_fd);
-		sock_fd = -1;
-	}
-	if (sock_fd2 >= 0) {
-		close(sock_fd2);
-		sock_fd2 = -1;
-	}
+	connection_stop(handles);
 error:
 	return -1;
 }
 
-void connection_stop(void)
+void connection_stop(struct handles *handles)
 {
-	if (sock_fd >= 0) {
-		close(sock_fd);
-		sock_fd = -1;
+	if (handles->sock >= 0) {
+		close(handles->sock);
+		handles->sock = -1;
 	}
-	if (sock_fd2 >= 0) {
-		close(sock_fd2);
-		sock_fd2 = -1;
+	if (handles->sock2 >= 0) {
+		close(handles->sock2);
+		handles->sock2 = -1;
 	}
 }
 
-void connection_cleanup(void)
+void connection_cleanup(struct handles *handles)
 {
-	if (sock_fd >= 0) {
-		close(sock_fd);
-		sock_fd = -1;
-	}
-	if (sock_fd2 >= 0) {
-		close(sock_fd2);
-		sock_fd2 = -1;
-	}
-	if (server_sock_fd >= 0) {
-		close(server_sock_fd);
-		server_sock_fd = -1;
+	connection_stop(handles);
+
+	if (handles->server_sock >= 0) {
+		close(handles->server_sock);
+		handles->server_sock = -1;
 	}
 }
 
-int transfer_data(int sock_fd, int sock_fd2, struct scope_parameter *param,
-                  option_fields_t *options)
+/*
+ * opens files according to options
+ * returns 0 on success, <0 on error
+ */
+int file_open(option_fields_t *options, struct handles *handles)
+{
+	if (!(handles->file = fopen(options->fname, "wb"))) {
+		fprintf(stderr, "file open failed, %s\n", strerror(errno));
+		goto error_close;
+	}
+	if (options->scope_chn == 2) {
+		if (!(handles->file2 = fopen(options->fname2, "wb"))) {
+			fprintf(stderr, "file open failed, %s\n", strerror(errno));
+			goto error_close;
+		}
+	}
+
+	return 0;
+
+error_close:
+	file_close(handles);
+	return -1;
+}
+
+void file_close(struct handles *handles)
+{
+	if (handles->file) {
+		fclose(handles->file);
+		handles->file = NULL;
+	}
+	if (handles->file2) {
+		fclose(handles->file2);
+		handles->file2 = NULL;
+	}
+}
+
+int transfer_data(struct scope_parameter *param, option_fields_t *options, struct handles *handles)
 {
 	unsigned long duration = 0UL;
 	u_int64_t transferred = 0ULL;
 	struct timeval start_time, end_time;
 	int report_rate = options->report_rate;
 
-	if (options->scope_chn == 2 && setup_threads(sock_fd, sock_fd2) < 0) {
+	if (options->scope_chn == 2 && setup_threads(handles) < 0) {
 		teardown_threads();
 		return -1;
 	}
@@ -356,19 +371,12 @@ int transfer_data(int sock_fd, int sock_fd2, struct scope_parameter *param,
 	if (report_rate && gettimeofday(&start_time, NULL))
 		report_rate = 0;
 
-	if (options->mode == client || options->mode == server) {
-		if (0) /* TODO depending on mmap success */
-			transferred = transfer_readwrite(sock_fd, param, options);
-		else if (options->scope_chn == 2)
-			transferred = transfer_buf_mmap_dual(&queue_a, &queue_b, param, options);
-		else
-			transferred = transfer_buf_mmap(sock_fd, param, options);
-	} else if (options->mode == file) {
-		if (0) /* TODO depending on mmap success */
-			/*transferred = transfer_readwritefile(sock_fd, param, options)*/;
-		else
-			transferred = transfer_buf_mmapfile(param, options);
-	}
+	if (0) /* TODO depending on mmap success */
+		transferred = transfer_readwrite(param, options, handles);
+	else if (options->scope_chn == 2)
+		transferred = transfer_buf_mmap_dual(param, options, &queue_a, &queue_b);
+	else
+		transferred = transfer_buf_mmap(param, options, handles);
 
 	if (report_rate && !gettimeofday(&end_time, NULL)) {
 		duration = 1000UL * (end_time.tv_sec - start_time.tv_sec)
@@ -398,7 +406,7 @@ static void int_handler(int sig)
 	interrupted = 1;
 }
 
-static int setup_threads(int sock_fd, int sock_fd2)
+static int setup_threads(struct handles *handles)
 {
 	int rc;
 
@@ -411,8 +419,10 @@ static int setup_threads(int sock_fd, int sock_fd2)
 		return -1;
 	}
 
-	queue_a.sock_fd = sock_fd;
-	queue_b.sock_fd = sock_fd2;
+	queue_a.sock_fd = handles->sock;
+	queue_b.sock_fd = handles->sock2;
+	queue_a.file_fd = handles->file;
+	queue_b.file_fd = handles->file2;
 
 	/* start socket senders */
 	rc = pthread_create(&queue_a.sender, NULL, send_worker, &queue_a);
@@ -453,8 +463,9 @@ static void teardown_threads()
 /*
  * transfers samples to socket via read() call on rpad_scope
  */
-static u_int64_t transfer_readwrite(int sock_fd, struct scope_parameter *param,
-                                    option_fields_t *options)
+static u_int64_t transfer_readwrite(struct scope_parameter *param,
+                                    option_fields_t *options,
+                                    struct handles *handles)
 {
 	u_int64_t transferred = 0ULL;
 	u_int64_t size = 1024ULL * options->kbytes_to_transfer;
@@ -474,7 +485,7 @@ static u_int64_t transfer_readwrite(int sock_fd, struct scope_parameter *param,
 			break;
 		}
 
-		if (send_buffer(sock_fd, options, buffer, block_length) < 0) {
+		if (send_buffer(handles->sock, options, buffer, block_length) < 0) {
 			if (!interrupted)
 				fprintf(stderr, "socket write failed, %s\n", strerror(errno));
 			break;
@@ -487,11 +498,12 @@ static u_int64_t transfer_readwrite(int sock_fd, struct scope_parameter *param,
 }
 
 /*
- * transfers samples to socket from non-cacheable mmap'ed scope buffer via a
+ * transfers samples to socket or file from non-cacheable mmap'ed scope buffer via a
  * cacheable intermediate buffer
  */
-static u_int64_t transfer_buf_mmap(int sock_fd, struct scope_parameter *param,
-                                   option_fields_t *options)
+static u_int64_t transfer_buf_mmap(struct scope_parameter *param,
+                                   option_fields_t *options,
+                                   struct handles *handles)
 {
 	const int CHUNK = 8 * 4096;
 	u_int64_t transferred = 0ULL;
@@ -536,13 +548,22 @@ static u_int64_t transfer_buf_mmap(int sock_fd, struct scope_parameter *param,
 			continue;
 		}
 
-		/* copy to cacheable buffer, shortens socket overhead by ~75% */
+		/* copy to cacheable buffer, shortens socket and file overhead by ~75% */
 		memcpy(buf, mapped_base + pos, len);
 
-		if (send_buffer(sock_fd, options, buf, len) < 0) {
-			if (!interrupted)
-				fprintf(stderr, "socket write failed, %s\n", strerror(errno));
-			break;
+		if (handles->sock >= 0) {
+			if (send_buffer(handles->sock, options, buf, len) < 0) {
+				if (!interrupted)
+					fprintf(stderr, "socket write failed, %s\n", strerror(errno));
+				break;
+			}
+		} else {
+			len = fwrite(buf, 1, len, handles->file);
+			if (len <= 0 || interrupted) {
+				if (!interrupted)
+					fprintf(stderr, "file write failed, %s\n", strerror(errno));
+				break;
+			}
 		}
 
 		pos += len;
@@ -561,9 +582,9 @@ static u_int64_t transfer_buf_mmap(int sock_fd, struct scope_parameter *param,
  * each block that was copied. rinse and repeat. access to write_pos and
  * read_pos is protected by queue->mutex.
  */
-static u_int64_t transfer_buf_mmap_dual(struct queue *a, struct queue *b,
-                                        struct scope_parameter *param,
-                                        option_fields_t *options)
+static u_int64_t transfer_buf_mmap_dual(struct scope_parameter *param,
+                                        option_fields_t *options,
+                                        struct queue *a, struct queue *b)
 {
 	u_int64_t transferred = 0ULL;
 	u_int64_t size = 1024ULL * options->kbytes_to_transfer;
@@ -669,7 +690,10 @@ static void *send_worker(void *data)
 		if (CIRCULAR_DIST(send_pos, write_pos, BUFFER_SIZE) >= BLOCK_SIZE) {
 			length = BLOCK_SIZE;
 			do {
-				sent = send(q->sock_fd, q->buf + send_pos, length, MSG_NOSIGNAL);
+				if (q->sock_fd >= 0)
+					sent = send(q->sock_fd, q->buf + send_pos, length, MSG_NOSIGNAL);
+				else
+					sent = fwrite(q->buf + send_pos, 1, length, q->file_fd);
 				if (sent > 0) {
 					send_pos += sent;
 					length -= sent;
@@ -690,83 +714,6 @@ send_worker_exit:
 	return NULL;
 }
 
-/*
- * transfers samples to file from non-cacheable mmap'ed scope buffer via a
- * cacheable intermediate buffer
- */
-static u_int64_t transfer_buf_mmapfile(struct scope_parameter *param,
-                                       option_fields_t *options)
-{
-	const int CHUNK = 8 * 4096;
-	u_int64_t transferred = 0ULL;
-	u_int64_t size = 1024ULL * options->kbytes_to_transfer;
-	unsigned long pos;
-	size_t len;
-	unsigned long curr;
-	unsigned long *curr_addr;
-	unsigned long base;
-	void *mapped_base;
-	size_t buf_size;
-	FILE *f;
-	void *buf;
-
-	if (!(buf = malloc(CHUNK))) {
-		fprintf(stderr, "no memory for temp buffer\n");
-		return 0ULL;
-	}
-
-	if (!(f = fopen(options->fname, "wb"))) {
-		fprintf(stderr, "file open failed, %s\n", strerror(errno));
-		free(buf);
-		return 0ULL;
-	}
-
-	curr_addr = param->mapped_io + (options->scope_chn ? 0x118 : 0x114);
-	base = *(unsigned long *)(param->mapped_io +
-	                          (options->scope_chn ? 0x10c : 0x104));
-	mapped_base = options->scope_chn ? param->mapped_buf_b
-	                                 : param->mapped_buf_a;
-	buf_size = options->scope_chn ? param->buf_b_size : param->buf_a_size;
-
-	pos = 0;
-	while (!size || transferred < size) {
-		if (pos == buf_size)
-			pos = 0;
-
-		curr = *curr_addr - base;
-
-		if (pos + CHUNK <= curr) {
-			len = CHUNK;
-		} else if (pos > curr) {
-			if (pos + CHUNK <= buf_size) {
-				len = CHUNK;
-			} else {
-				len = buf_size - pos;
-			}
-		} else {
-			continue;
-		}
-
-		/* copy to cacheable buffer, shortens file overhead */
-		memcpy(buf, mapped_base + pos, len);
-
-		len = fwrite(buf, 1, len, f);
-		if (len <= 0 || interrupted) {
-			if (!interrupted)
-				fprintf(stderr, "file write failed, %s\n", strerror(errno));
-			break;
-		}
-
-		pos += len;
-		transferred += len;
-	}
-
-	fclose(f);
-	free(buf);
-
-	return transferred;
-}
-
 static int send_buffer(int sock_fd, option_fields_t *options, const char *buf, size_t len)
 {
 	int retval = 0;
@@ -783,4 +730,3 @@ static int send_buffer(int sock_fd, option_fields_t *options, const char *buf, s
 
 	return retval;
 }
-

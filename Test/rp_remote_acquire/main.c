@@ -35,9 +35,9 @@
 #include <unistd.h>
 #include <stdint.h>
 
+#include "options.h"
 #include "scope.h"
 #include "transfer.h"
-#include "options.h"
 
 /******************************************************************************
  * Defines
@@ -64,6 +64,7 @@ static option_fields_t g_options =
 	.mode = client,
 	.kbytes_to_transfer = 0,
 	.fname = "/tmp/out",
+	.fname2 = "/tmp/out2",
 	.report_rate = 0,
 	.scope_chn = 0,
 	.scope_dec = 32,
@@ -78,8 +79,13 @@ static option_fields_t g_options =
 int main(int argc, char **argv)
 {
 	int retval;
-	int sock_fd = -1;
-	int sock_fd2 = -1;
+	struct handles handles = {
+			.sock = -1,
+			.sock2 = -1,
+			.server_sock = -1,
+			.file = NULL,
+			.file2 = NULL,
+	};
 	struct scope_parameter param;
 
 	if(0 != handle_options(argc,argv, &g_options))
@@ -96,8 +102,13 @@ int main(int argc, char **argv)
 	}
 
 	if (g_options.mode == client || g_options.mode == server) {
-		if (connection_init(&g_options)) {
+		if (connection_init(&g_options, &handles)) {
 			retval = 3;
+			goto cleanup_scope;
+		}
+	} else if (g_options.mode == file) {
+		if (file_open(&g_options, &handles)) {
+			retval = 4;
 			goto cleanup_scope;
 		}
 	}
@@ -105,24 +116,25 @@ int main(int argc, char **argv)
 	retval = 0;
 	while (!transfer_interrupted()) {
 		if (g_options.mode == client || g_options.mode == server) {
-			if (connection_start(&g_options, &sock_fd, &sock_fd2) < 0) {
+			if (connection_start(&g_options, &handles) < 0) {
 				fprintf(stderr, "%s: problem opening connection.\n", __func__);
 				continue;
 			}
 		}
 
-		retval = transfer_data(sock_fd, sock_fd2, &param, &g_options);
+		retval = transfer_data(&param, &g_options, &handles);
 		if (retval && !transfer_interrupted())
 			fprintf(stderr, "%s: problem transferring data.\n", __func__);
 
 		if (g_options.mode == client || g_options.mode == server)
-			connection_stop();
+			connection_stop(&handles);
 
 		if (g_options.mode == file)
 			break;
 	}
 
-	connection_cleanup();
+	connection_cleanup(&handles);
+	file_close(&handles);
 
 cleanup_scope:
 	scope_cleanup(&param);

@@ -45,6 +45,7 @@ struct option_fields_
 	enum mode_e mode;
 	size_t kbytes_to_transfer;
 	char *fname;
+	char *fname2;
 	int report_rate;
 	int scope_chn;
 	int scope_dec;
