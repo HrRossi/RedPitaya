@@ -97,6 +97,10 @@ endmodule
  * 2014-11-26 Nils Roos <doctor@smart.ms>
  * Interrupt support
  *
+ * + version 00003 (scope)
+ * 2016-02-27 Nils Roos <doctor@smart.ms>
+ * wrap around can be disabled
+ *
  */
 module axi_dump2ddr_master #(
     parameter   AXI_DW  =  64,          // data width (8,16,...,1024)
@@ -147,7 +151,7 @@ module axi_dump2ddr_master #(
     output      [   32-1:0] ddr_b_curr_o,   // DDR Dump ChB current write address
     output      [    2-1:0] ddr_status_o,   // DDR Dump [0,1]: INT pending A/B
     input                   ddr_stat_rd_i,  // DDR Dump INT pending was read
-    input       [    6-1:0] ddr_control_i,  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
+    input       [    8-1:0] ddr_control_i,  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B, [6,7]: disable wrap A/B
     output                  ddr_irq0_o      // DDR Dump interrupt request 0
 );
 
@@ -239,6 +243,8 @@ wire [       8-1:0] id_busy         = {|id_cnt[7],|id_cnt[6],|id_cnt[5],|id_cnt[
 wire                id_free         = (id_busy != 8'b11111111);
 wire [      32-1:0] ddr_a_next      = ddr_a_curr + (2**(BUF_AW-1))*8;
 wire [      32-1:0] ddr_b_next      = ddr_b_curr + (2**(BUF_AW-1))*8;
+wire                ddr_a_atend     = (ddr_a_next >= ddr_a_end_i);
+wire                ddr_b_atend     = (ddr_b_next >= ddr_b_end_i);
 wire                burst_end       = axi_wready_i & (buf_rp[3:0] == 4'b1111);
 wire                buf_end         = burst_end & (buf_rp[BUF_AW-1-1:4] == {BUF_AW-1-4{1'b1}});
 wire [       4-1:0] buf_newready;
@@ -277,10 +283,10 @@ assign  buf_finished[0] = tx_in_pr & buf_end & !buf_sel_ab & !buf_rp[BUF_AW-1];
 assign  buf_finished[1] = tx_in_pr & buf_end & !buf_sel_ab &  buf_rp[BUF_AW-1];
 assign  buf_finished[2] = tx_in_pr & buf_end &  buf_sel_ab & !buf_rp[BUF_AW-1];
 assign  buf_finished[3] = tx_in_pr & buf_end &  buf_sel_ab &  buf_rp[BUF_AW-1];
-assign  buf_newready[0] = buf_ready[0] & !buf_finished[0];
-assign  buf_newready[1] = buf_ready[1] & !buf_finished[1];
-assign  buf_newready[2] = buf_ready[2] & !buf_finished[2];
-assign  buf_newready[3] = buf_ready[3] & !buf_finished[3];
+assign  buf_newready[0] = buf_ready[0] & !buf_finished[0] & (~ddr_control_i[6] | ~ddr_a_atend);
+assign  buf_newready[1] = buf_ready[1] & !buf_finished[1] & (~ddr_control_i[6] | ~ddr_a_atend);
+assign  buf_newready[2] = buf_ready[2] & !buf_finished[2] & (~ddr_control_i[7] | ~ddr_b_atend);
+assign  buf_newready[3] = buf_ready[3] & !buf_finished[3] & (~ddr_control_i[7] | ~ddr_b_atend);
 
 
 // --------------------------------------------------------------------------------------------------
@@ -339,7 +345,7 @@ always @(posedge axi_clk_i) begin
         end
 
         if (start_new_tx & (buf_newready[0] | buf_newready[1])) begin
-            if (ddr_a_next >= ddr_a_end_i) begin
+            if (ddr_a_atend) begin
                 ddr_a_curr <= ddr_a_base_i;
             end else begin
                 ddr_a_curr <= ddr_a_next;
@@ -351,7 +357,7 @@ always @(posedge axi_clk_i) begin
         end
 
         if (start_new_tx & !(buf_newready[0] | buf_newready[1])) begin
-            if (ddr_b_next >= ddr_b_end_i) begin
+            if (ddr_b_atend) begin
                 ddr_b_curr <= ddr_b_base_i;
             end else begin
                 ddr_b_curr <= ddr_b_next;

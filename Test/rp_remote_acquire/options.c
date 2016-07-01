@@ -53,6 +53,8 @@ static struct option g_long_options[] =
 	{"scope-HV",           no_argument,       NULL, 1  },
 	{"scope-no-equalizer", no_argument,       NULL, 'e'},
 	{"scope-no-shaping",   no_argument,       NULL, 's'},
+	{"scope-14bit",        no_argument,       NULL, '4'},
+	{"scope-no-wrap",      no_argument,       NULL, 'o'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -67,7 +69,7 @@ int handle_options(int argc, char *argv[], option_fields_t *options)
 	if (argc <= 1)
 		return -1;
 
-	while ((ch = getopt_long(argc, argv, "a:p:q:m:uk:f:rhc:d:es", g_long_options, NULL)) != -1)
+	while ((ch = getopt_long(argc, argv, "a:p:q:m:uk:f:rhc:d:es4o", g_long_options, NULL)) != -1)
 	{
 		// check to see if a single character or long option came through
 		switch (ch)
@@ -128,6 +130,12 @@ int handle_options(int argc, char *argv[], option_fields_t *options)
 			break;
 		case 's': // disable shaping filter
 			options->scope_shaping = 0;
+			break;
+		case '4': // 14bit mode
+			options->scope_14bit = 1;
+			break;
+		case 'o': // disable wrap
+			options->scope_nowrap = 1;
 			break;
 		case '?':
 		case 'h':
@@ -199,6 +207,10 @@ void usage(const char *name)
 	       "\tenable HV equalizer settings (default LV)\n"
 	       "\033[1m-s  --scope-no-shaping\033[0m\n"
 	       "\tdisable shaping filter (default enabled)\n"
+	       "\033[1m-4  --scope-14bit\033[0m\n"
+	       "\tenable 14bit mode (default disabled)\n"
+	       "\033[1m-o  --scope-nowrap\033[0m\n"
+	       "\tdisable circular recording (default enabled)\n"
 	       "\n");
 	printf("Examples:\n");
 	printf("\033[1m%s -m 1 -a 192.168.1.1 -p 1234 -k 0 -c 0 -d 64\033[0m\n"

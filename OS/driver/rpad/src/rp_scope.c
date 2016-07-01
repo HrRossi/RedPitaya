@@ -147,8 +147,8 @@ static int init_hardware(struct rpad_scope *scope)
 		return 0;
 
 	id = ioread32(rp_addr(scope, RPAD_SYS_ID));
-	if (RPAD_VERSION(id) != 1 &&
-	    RPAD_VERSION(id) != 2)
+	if (RPAD_VERSION(id) < 1 ||
+	    RPAD_VERSION(id) > 3)
 		return -ENODEV; /* not a supported version */
 
 	/* load buffer addresses */
@@ -174,9 +174,9 @@ static int init_hardware(struct rpad_scope *scope)
 static void reset_dumping(struct rpad_scope *scope)
 {
 	/* stop scope */
-	iowrite32(0x00000002, rp_addr(scope, SCOPE_control));
+	iowrite32(0x00000002,               rp_addr(scope, SCOPE_control));
 	/* activate address injection A/B */
-	iowrite32(0x0000000c, rp_addr(scope, SCOPE_ddr_control));
+	iowrite32(0x0000000c | scope->mode, rp_addr(scope, SCOPE_ddr_control));
 	/* injection takes a few ADC cycles */
 	udelay(5);
 }
@@ -187,9 +187,9 @@ static void reset_dumping(struct rpad_scope *scope)
 static void start_dumping(struct rpad_scope *scope)
 {
 	/* enable dumping on A/B */
-	iowrite32(0x00000003, rp_addr(scope, SCOPE_ddr_control));
+	iowrite32(0x00000003 | scope->mode, rp_addr(scope, SCOPE_ddr_control));
 	/* arm scope */
-	iowrite32(0x00000001, rp_addr(scope, SCOPE_control));
+	iowrite32(0x00000001,               rp_addr(scope, SCOPE_control));
 }
 
 /*
@@ -200,8 +200,8 @@ static void stop_hardware(struct rpad_scope *scope)
 	if (!scope->hw_init_done)
 		return;
 
-	iowrite32(0x00000002, rp_addr(scope, SCOPE_control));
-	iowrite32(0x00000000, rp_addr(scope, SCOPE_ddr_control));
+	iowrite32(0x00000002,               rp_addr(scope, SCOPE_control));
+	iowrite32(0x00000000 | scope->mode, rp_addr(scope, SCOPE_ddr_control));
 	scope->hw_init_done = 0;
 }
 
@@ -463,6 +463,7 @@ struct rpad_devtype_data *rpad_scope_provider(unsigned int version)
 	case 1:
 		return &rpad_scope_data_v1;
 	case 2:
+	case 3:
 		return &rpad_scope_data_v2;
 	default:
 		return NULL;

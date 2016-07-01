@@ -70,6 +70,8 @@ static option_fields_t g_options =
 	.scope_equalizer = 1,
 	.scope_hv = 0,
 	.scope_shaping = 1,
+	.scope_14bit = 0,
+	.scope_nowrap = 0,
 };
 
 /******************************************************************************

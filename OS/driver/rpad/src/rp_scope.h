@@ -41,6 +41,7 @@ struct rpad_scope {
 	unsigned int		bb_size;
 	unsigned long		bb_phys_addr;
 	unsigned long		bb_last_curr;
+	u32			mode;
 };
 
 /* referenced from rp_pl_hw.c to put into the devtype_data table (see there) */

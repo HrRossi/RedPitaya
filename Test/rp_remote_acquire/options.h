@@ -51,6 +51,8 @@ struct option_fields_
 	int scope_hv;
 	int scope_equalizer;
 	int scope_shaping;
+	int scope_14bit;
+	int scope_nowrap;
 };
 typedef struct option_fields_ option_fields_t;
 

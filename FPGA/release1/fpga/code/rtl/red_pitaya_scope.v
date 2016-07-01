@@ -13,10 +13,19 @@
  * for more details on the language used herein.
  */
 /*
+ * + version 00001
  * 2014-10-15 Nils Roos <doctor@smart.ms>
  * Replaced connection of BRAM to (slow) sys_bus with high performance AXI
  * connection to DDR controller. Added control registers for the DDR buffer
  * operation and location. 
+ *
+ * + version 00002
+ * 2014-11-26 Nils Roos <doctor@smart.ms>
+ * Interrupt support
+ *
+ * + version 00003
+ * 2016-02-27 Nils Roos <doctor@smart.ms>
+ * wrap around can be disabled, 14bit legacy mode for ddrdumping
  */
 
 
@@ -88,7 +97,7 @@ module red_pitaya_scope
     input       [   32-1:0] ddr_b_curr_i    ,   // DDR ChB current write address
     input       [    2-1:0] ddr_status_i    ,   // DDR [0,1]: INT pending A/B
     output                  ddr_stat_rd_o   ,   // DDR INT pending was read
-    output      [    6-1:0] ddr_control_o   ,   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
+    output      [    8-1:0] ddr_control_o   ,   // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B, [6,7]: disable wrap A/B
 
     // Remote ADC buffer readout
     input           adcbuf_clk_i        ,   // clock
@@ -100,7 +109,7 @@ module red_pitaya_scope
 );
 
 // ID values to be read by the device driver, mapped at 40100ff0 - 40100fff
-localparam SYS_ID = 32'h00200002; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
+localparam SYS_ID = 32'h00200003; // ID: 32'hcccvvvvv, c=rp-deviceclass, v=versionnr
 localparam SYS_1  = 32'h00000000;
 localparam SYS_2  = 32'h00000000;
 localparam SYS_3  = 32'h00000000;
@@ -244,6 +253,8 @@ end
 wire [63:0] buf_a_data_o;
 wire [63:0] buf_b_data_o;
 reg  [10:0] adc_buf_wp;
+wire [15:0] adc_a_sdat = ddr_control[8] ? {{2{adc_a_dat[15]}},adc_a_dat[15:2]} : adc_a_dat[15:0];
+wire [15:0] adc_b_sdat = ddr_control[9] ? {{2{adc_b_dat[15]}},adc_b_dat[15:2]} : adc_b_dat[15:0];
 
 localparam RSZ = 14 ;  // RAM size 2^RSZ
 
@@ -427,7 +438,7 @@ BRAM_SDP_MACRO #(
     .INITP_0F(256'h0000000000000000000000000000000000000000000000000000000000000000)
 ) adc_a_buffer (
     .DO     (buf_a_data_o       ),  // Output read data port, width defined by READ_WIDTH parameter
-    .DI     (adc_a_dat          ),  // Input write data port, width defined by WRITE_WIDTH parameter
+    .DI     (adc_a_sdat         ),  // Input write data port, width defined by WRITE_WIDTH parameter
     .RDADDR (adcbuf_raddr_i     ),  // Input read address, width defined by read port depth
     .RDCLK  (adcbuf_clk_i       ),  // 1-bit input read clock
     .RDEN   (adcbuf_select_i[0] ),  // 1-bit input read port enable
@@ -600,7 +611,7 @@ BRAM_SDP_MACRO #(
     .INITP_0F(256'h0000000000000000000000000000000000000000000000000000000000000000)
 ) adc_b_buffer (
     .DO     (buf_b_data_o       ),  // Output read data port, width defined by READ_WIDTH parameter
-    .DI     (adc_b_dat          ),  // Input write data port, width defined by WRITE_WIDTH parameter
+    .DI     (adc_b_sdat         ),  // Input write data port, width defined by WRITE_WIDTH parameter
     .RDADDR (adcbuf_raddr_i     ),  // Input read address, width defined by read port depth
     .RDCLK  (adcbuf_clk_i       ),  // 1-bit input read clock
     .RDEN   (adcbuf_select_i[1] ),  // 1-bit input read port enable
@@ -933,13 +944,14 @@ reg  [  32-1:0] ddr_a_base;     // DDR ChA buffer base address
 reg  [  32-1:0] ddr_a_end;      // DDR ChA buffer end address + 1
 reg  [  32-1:0] ddr_b_base;     // DDR ChB buffer base address
 reg  [  32-1:0] ddr_b_end;      // DDR ChB buffer end address + 1
-reg  [   6-1:0] ddr_control;    // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
+reg  [  10-1:0] ddr_control;    // DDR [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B, 
+                                //     [6,7]: disable wrap A/B, [8,9]: 14bit mode A/B
 
 assign ddr_a_base_o  = ddr_a_base;
 assign ddr_a_end_o   = ddr_a_end;
 assign ddr_b_base_o  = ddr_b_base;
 assign ddr_b_end_o   = ddr_b_end;
-assign ddr_control_o = ddr_control;
+assign ddr_control_o = ddr_control[8-1:0];
 assign ddr_stat_rd_o = ren & (addr[19:0] == 20'h0011c);
 
 always @(posedge adc_clk_i) begin
@@ -963,7 +975,7 @@ always @(posedge adc_clk_i) begin
         ddr_a_end   <= 32'h00000000;
         ddr_b_base  <= 32'h00000000;
         ddr_b_end   <= 32'h00000000;
-        ddr_control <= 6'b000000;
+        ddr_control <= 10'h0;
    end
    else begin
       if (wen) begin
@@ -984,7 +996,7 @@ always @(posedge adc_clk_i) begin
          if (addr[19:0]==20'h48)   set_b_filt_kk <= wdata[25-1:0] ;
          if (addr[19:0]==20'h4C)   set_b_filt_pp <= wdata[25-1:0] ;
 
-            if (addr[19:0] == 20'h100)  ddr_control <= wdata[5:0];
+            if (addr[19:0] == 20'h100)  ddr_control <= wdata[10-1:0];
             if (addr[19:0] == 20'h104)  ddr_a_base  <= wdata;
             if (addr[19:0] == 20'h108)  ddr_a_end   <= wdata;
             if (addr[19:0] == 20'h10c)  ddr_b_base  <= wdata;
@@ -1026,7 +1038,7 @@ always @(*) begin
      20'h00048 : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_kk}      ; end
      20'h0004C : begin ack <= 1'b1;          rdata <= {{32-25{1'b0}}, set_b_filt_pp}      ; end
 
-    20'h00100:  begin   ack <= 1'b1; rdata <= {{32-6{1'b0}},ddr_control};  end
+    20'h00100:  begin   ack <= 1'b1; rdata <= {{32-10{1'b0}},ddr_control};  end
     20'h00104:  begin   ack <= 1'b1; rdata <= ddr_a_base;   end
     20'h00108:  begin   ack <= 1'b1; rdata <= ddr_a_end;    end
     20'h0010c:  begin   ack <= 1'b1; rdata <= ddr_b_base;   end

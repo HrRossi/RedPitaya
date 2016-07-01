@@ -186,7 +186,7 @@ wire [  32-1:0] ddrd_b_end;     // DDR Dump ChB buffer end address + 1
 wire [  32-1:0] ddrd_b_curr;    // DDR Dump ChB current write address
 wire [   2-1:0] ddrd_status;    // DDR Dump [0,1]: INT pending A/B
 wire            ddrd_stat_rd;   // DDR Dump INT pending was read
-wire [   6-1:0] ddrd_control;   // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
+wire [   8-1:0] ddrd_control;   // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B, [6,7]: disable wrap A/B
 wire            ddrd_irq0;      // DDR Dump interrupt request 0
 
 // PL-PS Interrupt lines
@@ -367,7 +367,7 @@ red_pitaya_ps i_ps
     .ddrd_b_curr_o  (ddrd_b_curr                ),  // DDR Dump ChB current write address
     .ddrd_status_o  (ddrd_status                ),  // DDR Dump [0,1]: INT pending A/B
     .ddrd_stat_rd_i (ddrd_stat_rd               ),  // DDR Dump INT pending was read
-    .ddrd_control_i (ddrd_control               ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
+    .ddrd_control_i (ddrd_control               ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B, [6,7]: disable wrap A/B
     .ddrd_irq0_o    (ddrd_irq0                  ),  // DDR Dump interrupt request 0
 
     // PL-PS Interrupt lines
@@ -537,7 +537,7 @@ red_pitaya_scope i_scope
     .ddr_b_curr_i       (ddrd_b_curr        ),  // DDR Dump ChB current write address
     .ddr_status_i       (ddrd_status        ),  // DDR Dump [0,1]: INT pending A/B
     .ddr_stat_rd_o      (ddrd_stat_rd       ),  // DDR Dump INT pending was read
-    .ddr_control_o      (ddrd_control       ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B
+    .ddr_control_o      (ddrd_control       ),  // DDR Dump [0,1]: dump enable flag A/B, [2,3]: reload curr A/B, [4,5]: INT enable A/B, [6,7]: disable wrap A/B
 
     // ADC data buffer
     .adcbuf_clk_i       (fclk[0]            ),  // clock
