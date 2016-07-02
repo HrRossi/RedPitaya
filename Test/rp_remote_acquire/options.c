@@ -164,7 +164,7 @@ int check_options(option_fields_t *options)
 		strcpy(options->address,"127.0.0.1");
 	}
 
-	if (options->scope_chn == 2 && (options->mode != client || options->mode != file)) {
+	if (options->scope_chn == 2 && options->mode != client && options->mode != file) {
 		fprintf(stderr,"Dual channel requires client mode or file mode\n");
 		return 1;
 	}
