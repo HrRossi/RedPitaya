@@ -46,6 +46,7 @@ static struct option g_long_options[] =
 	{"udp",                no_argument,       NULL, 'u'},
 	{"kbytes_to_transfer", required_argument, NULL, 'k'},
 	{"fname",              required_argument, NULL, 'f'},
+	{"secondary_fname",    required_argument, NULL, 'g'},
 	{"report-rate",        no_argument,       NULL, 'r'},
 	{"help",               no_argument,       NULL, 'h'},
 	{"scope-channel",      required_argument, NULL, 'c'},
@@ -67,7 +68,7 @@ int handle_options(int argc, char *argv[], option_fields_t *options)
 	if (argc <= 1)
 		return -1;
 
-	while ((ch = getopt_long(argc, argv, "a:p:q:m:uk:f:rhc:d:es", g_long_options, NULL)) != -1)
+	while ((ch = getopt_long(argc, argv, "a:p:q:m:uk:f:g:rhc:d:es", g_long_options, NULL)) != -1)
 	{
 		// check to see if a single character or long option came through
 		switch (ch)
@@ -99,6 +100,9 @@ int handle_options(int argc, char *argv[], option_fields_t *options)
 			break;
 		case 'f': // file name
 			options->fname = optarg;
+			break;
+		case 'g': // file name second channel
+			options->fname2 = optarg;
 			break;
 		case 'r': // report-rate
 			options->report_rate = 1;
@@ -160,8 +164,8 @@ int check_options(option_fields_t *options)
 		strcpy(options->address,"127.0.0.1");
 	}
 
-	if (options->scope_chn == 2 && options->mode != client) {
-		fprintf(stderr,"Dual channel requires client mode\n");
+	if (options->scope_chn == 2 && options->mode != client && options->mode != file) {
+		fprintf(stderr,"Dual channel requires client mode or file mode\n");
 		return 1;
 	}
 
@@ -170,7 +174,7 @@ int check_options(option_fields_t *options)
 
 void usage(const char *name)
 {
-	printf("Usage: \033[1m%s [-mapqukfrhcdes]\033[0m\n", name);
+	printf("Usage: \033[1m%s [-mapqukfgrhcdes]\033[0m\n", name);
 	printf("\033[1m-m  --mode <(1|client)|(2|server)|(3|file)>\033[0m\n"
 	       "\toperating mode (default client)\n"
 	       "\033[1m-a  --address <ip_address>\033[0m\n"
@@ -185,6 +189,8 @@ void usage(const char *name)
 	       "\tkilobytes to transfer (default 0 = unlimited)\n"
 	       "\033[1m-f  --fname <target>\033[0m\n"
 	       "\ttarget file name in file mode (default /tmp/out)\n"
+	       "\033[1m-g  --secondary_fname <target>\033[0m\n"
+	       "\ttarget file name for second channel in file mode (default /tmp/out2)\n"
 	       "\033[1m-r  --report-rate\033[0m\n"
 	       "\tturn on rate reporting (default off)\n"
 	       "\033[1m-h  --help\033[0m\n"

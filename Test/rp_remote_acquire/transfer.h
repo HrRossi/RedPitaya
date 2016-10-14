@@ -31,18 +31,28 @@
 #define TRANSFER_H_
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "options.h"
 #include "scope.h"
 
+struct handles {
+	int sock;
+	int sock2;
+	int server_sock;
+	FILE *file;
+	FILE *file2;
+};
+
 void signal_init(void);
 void signal_exit(void);
-int connection_init(option_fields_t *options);
-int connection_start(option_fields_t *options, int *sock_fd, int *sock_fd2);
-void connection_stop();
-void connection_cleanup();
-int transfer_data(int sock_fd, int sock_fd2, struct scope_parameter *param,
-                  option_fields_t *options);
+int connection_init(option_fields_t *options, struct handles *handles);
+int connection_start(option_fields_t *options, struct handles *handles);
+void connection_stop(struct handles *handles);
+void connection_cleanup(struct handles *handles);
+int file_open(option_fields_t *options, struct handles *handles);
+void file_close(struct handles *handles);
+int transfer_data(struct scope_parameter *param, option_fields_t *options, struct handles *handles);
 
 int transfer_interrupted(void);
 
